@@ -235,26 +235,33 @@ app.post('/api/channels/delete-batch', async (req, res) => {
 app.put('/api/channels/reorder', async (req, res) => {
   try {
     const { order } = req.body;
-    console.log('[reorder] Raw body:', JSON.stringify(req.body).slice(0, 300));
+    console.log('[reorder] Called with', JSON.stringify(req.body).slice(0, 200));
     if (!Array.isArray(order)) return res.status(400).json({ error: 'order must be an array' });
-    const parsed = [];
+    
+    const mysql = require('mysql2/promise');
+    const dbMod = require('./db');
+    const pool = mysql.createPool({
+      host: dbMod.getSetting('ministra_db_host'),
+      port: parseInt(dbMod.getSetting('ministra_db_port') || '3306', 10),
+      user: dbMod.getSetting('ministra_db_user'),
+      password: dbMod.getSetting('ministra_db_pass'),
+      database: dbMod.getSetting('ministra_db_name') || 'stalker_db',
+    });
+    
+    let updated = 0;
     for (const item of order) {
-      const id = Number(item.id);
-      const num = Number(item.number);
-      console.log(`[reorder] item: id=${item.id}(${typeof item.id})→${id}, number=${item.number}(${typeof item.number})→${num}`);
-      if (id > 0 && num >= 0) parsed.push({ id, number: num });
+      const id = Math.floor(Number(item.id));
+      const num = Math.floor(Number(item.number));
+      if (!id || id <= 0) continue;
+      await pool.query('UPDATE itv SET number = ?, modified = NOW() WHERE id = ?', [num, id]);
+      updated++;
     }
-    console.log(`[reorder] Valid items: ${parsed.length} of ${order.length}`);
-    if (parsed.length === 0) return res.status(400).json({ error: 'No valid items' });
-    const p = ministra.__getPool ? ministra.__getPool() : null;
-    // Direct MySQL query to bypass any caching
-    for (const item of parsed) {
-      console.log(`[reorder] UPDATE itv SET number=${item.number} WHERE id=${item.id}`);
-    }
-    await ministra.reorderChannels(parsed);
-    res.json({ ok: true, reordered: parsed.length });
+    
+    await pool.end();
+    console.log(`[reorder] Updated ${updated} channels`);
+    res.json({ ok: true, reordered: updated });
   } catch (err) {
-    console.error('[reorder] Error:', err.message);
+    console.error('[reorder] Error:', err.message, err.stack);
     res.status(500).json({ error: err.message });
   }
 });
