@@ -2,9 +2,9 @@ import { useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LogResultBadge } from "@/components/StatusBadge";
+import { TablePagination, usePagination } from "@/components/TablePagination";
 import { mockLogs } from "@/lib/mock-data";
 import { Search, ScrollText } from "lucide-react";
 
@@ -20,6 +20,15 @@ const LogsPage = () => {
     return matchSearch && matchResult;
   });
 
+  const {
+    paginatedItems,
+    currentPage,
+    pageSize,
+    totalItems,
+    setCurrentPage,
+    handlePageSizeChange,
+  } = usePagination(filtered, 10);
+
   return (
     <DashboardLayout>
       <div className="p-6 lg:p-8 max-w-full animate-fade-in">
@@ -32,9 +41,9 @@ const LogsPage = () => {
           <div className="flex flex-wrap gap-3 items-center">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input placeholder="Search logs..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9 w-64" />
+              <Input placeholder="Search logs..." value={search} onChange={e => { setSearch(e.target.value); setCurrentPage(1); }} className="pl-9 h-9 w-64" />
             </div>
-            <Select value={resultFilter} onValueChange={setResultFilter}>
+            <Select value={resultFilter} onValueChange={(v) => { setResultFilter(v); setCurrentPage(1); }}>
               <SelectTrigger className="w-36 h-9">
                 <SelectValue placeholder="Filter result" />
               </SelectTrigger>
@@ -63,7 +72,7 @@ const LogsPage = () => {
                 </tr>
               </thead>
               <tbody>
-                {filtered.length === 0 ? (
+                {paginatedItems.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="text-center py-12 text-muted-foreground">
                       <ScrollText className="w-8 h-8 mx-auto mb-2 opacity-40" />
@@ -71,7 +80,7 @@ const LogsPage = () => {
                     </td>
                   </tr>
                 ) : (
-                  filtered.map(log => (
+                  paginatedItems.map(log => (
                     <tr key={log.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
                       <td className="p-3 font-mono text-xs text-muted-foreground whitespace-nowrap">{log.timestamp}</td>
                       <td className="p-3 font-mono font-medium text-foreground">{log.streamKey}</td>
@@ -85,6 +94,13 @@ const LogsPage = () => {
               </tbody>
             </table>
           </div>
+          <TablePagination
+            currentPage={currentPage}
+            totalItems={totalItems}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={handlePageSizeChange}
+          />
         </Card>
       </div>
     </DashboardLayout>
