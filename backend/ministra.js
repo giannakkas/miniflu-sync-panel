@@ -158,7 +158,7 @@ async function getNextChannelNumber() {
 async function syncStream(streamKey, title, outputUrl, sortOrder) {
   const p = getPool();
   const cols = await getItvColumns();
-  const cmd = outputUrl;
+  const cmd = `ffmpeg ${outputUrl}`;
 
   // Check if channel already exists
   const existing = await findChannelByCmd(streamKey);
@@ -182,7 +182,7 @@ async function syncStream(streamKey, title, outputUrl, sortOrder) {
 
   // Values we want to set
   const wanted = {
-    name: title, number: num, cmd: cmd, cmd_type: '',
+    name: title, number: num, cmd: cmd, cmd_type: 'ffmpeg',
     status: 1, tv_genre_id: 0, xmltv_id: '', use_http_tmp_link: 0,
     monitoring_url: '', base_ch: 1, modified: now, added: now,
   };
