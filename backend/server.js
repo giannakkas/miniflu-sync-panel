@@ -16,6 +16,17 @@ const ministra = require('./ministra');
 const app = express();
 app.use(express.json());
 
+// Debug: verify this is the latest code
+app.get('/api/version', (req, res) => res.json({ version: 'v20-reorder-fix', time: new Date().toISOString() }));
+
+// Debug: log ALL PUT requests
+app.use((req, res, next) => {
+  if (req.method === 'PUT') {
+    console.log(`[DEBUG] PUT ${req.path} body:`, JSON.stringify(req.body).slice(0, 200));
+  }
+  next();
+});
+
 const distPath = path.join(__dirname, '..', 'dist');
 app.use(express.static(distPath));
 
@@ -233,35 +244,42 @@ app.post('/api/channels/delete-batch', async (req, res) => {
 });
 
 app.put('/api/channels/reorder', async (req, res) => {
+  console.log('=== REORDER HIT ===');
   try {
-    const { order } = req.body;
-    console.log('[reorder] Called with', JSON.stringify(req.body).slice(0, 200));
-    if (!Array.isArray(order)) return res.status(400).json({ error: 'order must be an array' });
-    
-    const mysql = require('mysql2/promise');
+    const body = req.body;
+    const order = body && body.order;
+    if (!order || !Array.isArray(order)) {
+      return res.status(400).json({ error: 'order must be an array' });
+    }
+
+    const mysql2 = require('mysql2/promise');
     const dbMod = require('./db');
-    const pool = mysql.createPool({
+    const conn = await mysql2.createConnection({
       host: dbMod.getSetting('ministra_db_host'),
-      port: parseInt(dbMod.getSetting('ministra_db_port') || '3306', 10),
+      port: Number(dbMod.getSetting('ministra_db_port')) || 3306,
       user: dbMod.getSetting('ministra_db_user'),
       password: dbMod.getSetting('ministra_db_pass'),
       database: dbMod.getSetting('ministra_db_name') || 'stalker_db',
     });
-    
-    let updated = 0;
-    for (const item of order) {
-      const id = Math.floor(Number(item.id));
-      const num = Math.floor(Number(item.number));
-      if (!id || id <= 0) continue;
-      await pool.query('UPDATE itv SET number = ?, modified = NOW() WHERE id = ?', [num, id]);
-      updated++;
+
+    let count = 0;
+    for (let i = 0; i < order.length; i++) {
+      const rawId = order[i].id;
+      const rawNum = order[i].number;
+      const id = typeof rawId === 'string' ? parseInt(rawId) : rawId;
+      const num = typeof rawNum === 'string' ? parseInt(rawNum) : rawNum;
+      console.log(`  [${i}] rawId=${rawId} rawNum=${rawNum} → id=${id} num=${num}`);
+      if (id && num >= 0 && !isNaN(id) && !isNaN(num)) {
+        await conn.execute('UPDATE itv SET number = ?, modified = NOW() WHERE id = ?', [num, id]);
+        count++;
+      }
     }
-    
-    await pool.end();
-    console.log(`[reorder] Updated ${updated} channels`);
-    res.json({ ok: true, reordered: updated });
+
+    await conn.end();
+    console.log(`=== REORDER DONE: ${count}/${order.length} ===`);
+    res.json({ ok: true, reordered: count });
   } catch (err) {
-    console.error('[reorder] Error:', err.message, err.stack);
+    console.error('=== REORDER ERROR:', err.message, '===');
     res.status(500).json({ error: err.message });
   }
 });
