@@ -192,14 +192,15 @@ async function upsertChLink(pool, channelId, url) {
   if (existing.length > 0) {
     // Update existing link
     await pool.query(
-      'UPDATE ch_links SET url = ?, changed = NOW() WHERE ch_id = ?',
+      'UPDATE ch_links SET url = ?, status = 1, changed = NOW() WHERE ch_id = ?',
       [url, channelId]
     );
   } else {
-    // Insert new link
+    // Insert new link with all required fields
     await pool.query(
-      `INSERT INTO ch_links (ch_id, priority, url, status, changed)
-       VALUES (?, 0, ?, 1, NOW())`,
+      `INSERT INTO ch_links (ch_id, priority, url, status, use_http_tmp_link, wowza_tmp_link,
+       user_agent_filter, monitoring_url, use_load_balancing, changed)
+       VALUES (?, 0, ?, 1, 0, 0, '', '', 0, NOW())`,
       [channelId, url]
     );
   }
@@ -218,6 +219,8 @@ async function syncStream(streamKey, title, outputUrl, sortOrder) {
 
   if (existing) {
     if (existing.cmd === cmd && existing.name === title) {
+      // Still ensure ch_links exists
+      await upsertChLink(p, existing.id, cmd);
       return { action: 'already_exists', channelId: existing.id, channelName: existing.name };
     }
     const updateCols = ['name = ?', 'cmd = ?', 'tv_genre_id = ?'];
