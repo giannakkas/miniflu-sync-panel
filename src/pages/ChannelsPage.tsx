@@ -108,8 +108,11 @@ const ChannelsPage = () => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
     setChannels(prev => {
-      const oldIndex = prev.findIndex(ch => ch.id === active.id);
-      const newIndex = prev.findIndex(ch => ch.id === over.id);
+      const activeId = Number(active.id);
+      const overId = Number(over.id);
+      const oldIndex = prev.findIndex(ch => ch.id === activeId);
+      const newIndex = prev.findIndex(ch => ch.id === overId);
+      if (oldIndex === -1 || newIndex === -1) return prev;
       const reordered = arrayMove(prev, oldIndex, newIndex).map((ch, i) => ({ ...ch, number: i + 1 }));
       api.reorderChannels(reordered.map(ch => ({ id: ch.id, number: ch.number })))
         .then(() => toast.success("Channel order saved to Ministra"))

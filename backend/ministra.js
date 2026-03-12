@@ -371,7 +371,13 @@ async function updateChannel(id, fields) {
 async function reorderChannels(order) {
   const p = getPool();
   for (const item of order) {
-    await p.query('UPDATE itv SET number = ?, modified = NOW() WHERE id = ?', [item.number, item.id]);
+    const id = parseInt(item.id, 10);
+    const num = parseInt(item.number, 10);
+    if (isNaN(id) || isNaN(num)) {
+      console.error(`[ministra] Skipping invalid reorder entry: id=${item.id}, number=${item.number}`);
+      continue;
+    }
+    await p.query('UPDATE itv SET number = ?, modified = NOW() WHERE id = ?', [num, id]);
   }
   console.log(`[ministra] Reordered ${order.length} channels`);
 }
