@@ -13,7 +13,7 @@ const statusConfig: Record<SyncStatus, { label: string; className: string }> = {
 
 export function StatusBadge({ status }: { status: SyncStatus }) {
   const config = statusConfig[status];
-  return <Badge className={cn("font-medium text-xs", config.className)}>{config.label}</Badge>;
+  return <Badge variant="outline" className={cn("font-medium text-xs border-0", config.className)}>{config.label}</Badge>;
 }
 
 const protocolConfig: Record<Protocol, string> = {
