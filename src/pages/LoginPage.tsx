@@ -31,7 +31,7 @@ const LoginPage = () => {
       {/* Left branding panel */}
       <div className="hidden lg:flex lg:w-1/2 flex-col justify-center items-center p-12 bg-[#0a0a0a]">
         <div className="max-w-lg text-center">
-          <img src="/venushub-logo.png" alt="Venus Hub" className="h-24 mx-auto mb-10" />
+          <img src="/venushub-logo.png" alt="Venus Hub" className="h-36 mx-auto mb-10" />
           <p className="text-gray-400 text-lg mb-6">IPTV Stream Sync Panel</p>
           <div className="flex items-center justify-center gap-2 text-gray-500 text-sm">
             <Wifi className="w-4 h-4" />
@@ -44,7 +44,7 @@ const LoginPage = () => {
       <div className="flex-1 flex items-center justify-center p-8 bg-background rounded-l-3xl">
         <div className="w-full max-w-sm animate-fade-in">
           <div className="lg:hidden flex items-center gap-3 mb-8 justify-center">
-            <img src="/venushub-logo.png" alt="Venus Hub" className="h-14" />
+            <img src="/venushub-logo.png" alt="Venus Hub" className="h-16" />
           </div>
 
           <h2 className="text-2xl font-semibold text-foreground mb-1">Welcome back</h2>

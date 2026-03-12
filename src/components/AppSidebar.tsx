@@ -36,8 +36,8 @@ export function AppSidebar() {
       )}
     >
       {/* Logo */}
-      <div className="h-16 flex items-center justify-center px-3 border-b border-sidebar-border">
-        <img src="/venushub-logo.png" alt="Venus Hub" className={cn("shrink-0 object-contain", collapsed ? "h-6" : "h-10")} />
+      <div className="h-20 flex items-center justify-center px-3 border-b border-sidebar-border">
+        <img src="/venushub-logo.png" alt="Venus Hub" className={cn("shrink-0 object-contain", collapsed ? "h-8" : "h-14")} />
       </div>
 
       {/* Nav */}
