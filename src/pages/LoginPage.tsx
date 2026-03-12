@@ -29,18 +29,13 @@ const LoginPage = () => {
   return (
     <div className="min-h-screen flex bg-sidebar">
       {/* Left branding panel */}
-      <div className="hidden lg:flex lg:w-1/2 flex-col justify-center items-center p-12">
+      <div className="hidden lg:flex lg:w-1/2 flex-col justify-center items-center p-12 bg-black">
         <div className="max-w-md text-center">
-          <div className="flex items-center justify-center gap-3 mb-8">
-            <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center">
-              <Radio className="w-7 h-7 text-primary-foreground" />
-            </div>
-            <h1 className="text-4xl font-bold text-sidebar-accent-foreground tracking-tight">MiniFlu</h1>
-          </div>
-          <p className="text-sidebar-foreground text-lg mb-6">Flussonic to Ministra Sync Panel</p>
+          <img src="/venushub-logo.png" alt="Venus Hub" className="h-16 mx-auto mb-8" />
+          <p className="text-sidebar-foreground text-lg mb-6">IPTV Stream Sync Panel</p>
           <div className="flex items-center justify-center gap-2 text-sidebar-foreground/60 text-sm">
             <Wifi className="w-4 h-4" />
-            <span>IPTV Stream Management</span>
+            <span>Flussonic → Ministra</span>
           </div>
         </div>
       </div>
@@ -49,10 +44,7 @@ const LoginPage = () => {
       <div className="flex-1 flex items-center justify-center p-8 bg-background rounded-l-3xl">
         <div className="w-full max-w-sm animate-fade-in">
           <div className="lg:hidden flex items-center gap-3 mb-8 justify-center">
-            <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
-              <Radio className="w-6 h-6 text-primary-foreground" />
-            </div>
-            <h1 className="text-2xl font-bold text-foreground tracking-tight">MiniFlu</h1>
+            <img src="/venushub-logo.png" alt="Venus Hub" className="h-10" />
           </div>
 
           <h2 className="text-2xl font-semibold text-foreground mb-1">Welcome back</h2>
@@ -104,7 +96,7 @@ const LoginPage = () => {
           </form>
 
           <p className="text-xs text-muted-foreground mt-8 text-center">
-            Internal operator panel · MiniFlu v1.0
+            Internal operator panel · Venus Hub v1.0
           </p>
         </div>
       </div>

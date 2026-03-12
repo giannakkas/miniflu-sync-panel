@@ -37,15 +37,7 @@ export function AppSidebar() {
     >
       {/* Logo */}
       <div className="h-16 flex items-center gap-3 px-4 border-b border-sidebar-border">
-        <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shrink-0">
-          <Radio className="w-5 h-5 text-primary-foreground" />
-        </div>
-        {!collapsed && (
-          <div className="overflow-hidden">
-            <h1 className="text-sm font-bold text-sidebar-accent-foreground leading-tight">MiniFlu</h1>
-            <p className="text-[10px] text-sidebar-foreground leading-tight">IPTV Sync</p>
-          </div>
-        )}
+        <img src="/venushub-logo.png" alt="Venus Hub" className={cn("h-8 shrink-0", collapsed ? "h-8 w-8 object-contain" : "h-8")} />
       </div>
 
       {/* Nav */}
