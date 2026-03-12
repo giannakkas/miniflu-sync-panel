@@ -112,7 +112,10 @@ function buildApiHeaders() {
 async function getChannels() {
   const p = getPool();
   const [rows] = await p.query(
-    'SELECT id, name, number, cmd, status, tv_genre_id FROM itv ORDER BY number ASC'
+    `SELECT i.id, i.name, i.number, COALESCE(cl.url, i.cmd) as cmd, i.status, i.tv_genre_id
+     FROM itv i LEFT JOIN ch_links cl ON cl.ch_id = i.id
+     GROUP BY i.id
+     ORDER BY i.number ASC`
   );
   return rows.map(r => ({
     id: r.id,
@@ -140,11 +143,20 @@ function extractStreamKey(cmd) {
 
 async function findChannelByCmd(streamKey) {
   const p = getPool();
+  // Search in itv.cmd
   const [rows] = await p.query(
     'SELECT id, name, number, cmd FROM itv WHERE cmd LIKE ? OR cmd LIKE ?',
     [`%/${streamKey}/%`, `%/${streamKey}`]
   );
-  return rows.length > 0 ? rows[0] : null;
+  if (rows.length > 0) return rows[0];
+  // Also search in ch_links.url
+  const [linkRows] = await p.query(
+    `SELECT i.id, i.name, i.number, i.cmd FROM itv i
+     JOIN ch_links cl ON cl.ch_id = i.id
+     WHERE cl.url LIKE ? OR cl.url LIKE ?`,
+    [`%/${streamKey}/%`, `%/${streamKey}`]
+  );
+  return linkRows.length > 0 ? linkRows[0] : null;
 }
 
 async function getNextChannelNumber() {
@@ -170,6 +182,29 @@ async function getGeneralGenreId() {
   return cachedGenreId;
 }
 
+// ── ch_links helper (Ministra stores streaming URLs here) ───────────
+
+async function upsertChLink(pool, channelId, url) {
+  // Check if link already exists for this channel
+  const [existing] = await pool.query(
+    'SELECT id FROM ch_links WHERE ch_id = ? LIMIT 1', [channelId]
+  );
+  if (existing.length > 0) {
+    // Update existing link
+    await pool.query(
+      'UPDATE ch_links SET url = ?, changed = NOW() WHERE ch_id = ?',
+      [url, channelId]
+    );
+  } else {
+    // Insert new link
+    await pool.query(
+      `INSERT INTO ch_links (ch_id, priority, url, status, changed)
+       VALUES (?, 0, ?, 1, NOW())`,
+      [channelId, url]
+    );
+  }
+}
+
 // ── Create / Update channel (schema-safe) ───────────────────────────
 
 async function syncStream(streamKey, title, outputUrl, sortOrder) {
@@ -191,6 +226,8 @@ async function syncStream(streamKey, title, outputUrl, sortOrder) {
     if (cols['modified']) { updateCols.push('modified = NOW()'); }
     updateVals.push(existing.id);
     await p.query(`UPDATE itv SET ${updateCols.join(', ')} WHERE id = ?`, updateVals);
+    // Update ch_links too
+    await upsertChLink(p, existing.id, cmd);
     return { action: 'updated', channelId: existing.id, channelName: title };
   }
 
@@ -248,6 +285,8 @@ async function syncStream(streamKey, title, outputUrl, sortOrder) {
 
   try {
     const [result] = await p.query(sql, values);
+    // Insert streaming link into ch_links
+    await upsertChLink(p, result.insertId, cmd);
     return { action: 'created', channelId: result.insertId, channelName: title };
   } catch (err) {
     console.error(`[ministra] INSERT failed: ${err.message}`);
@@ -264,12 +303,16 @@ async function syncStream(streamKey, title, outputUrl, sortOrder) {
  */
 async function reconcileWithPanel(localDb) {
   const p = getPool();
-  const [rows] = await p.query('SELECT id, name, number, cmd, status FROM itv ORDER BY number ASC');
+  const [rows] = await p.query(
+    `SELECT i.id, i.name, i.number, COALESCE(cl.url, i.cmd) as cmd, i.status
+     FROM itv i LEFT JOIN ch_links cl ON cl.ch_id = i.id
+     GROUP BY i.id
+     ORDER BY i.number ASC`
+  );
 
   // First, mark ALL streams as not_synced
   localDb.db.exec("UPDATE streams SET status = 'not_synced', ministra_channel_name = NULL, ministra_channel_id = NULL");
 
-  // Build set of stream keys in Ministra
   let matched = 0;
   for (const ch of rows) {
     const streamKey = extractStreamKey(ch.cmd);
@@ -289,6 +332,7 @@ async function reconcileWithPanel(localDb) {
 
 async function deleteChannel(id) {
   const p = getPool();
+  await p.query('DELETE FROM ch_links WHERE ch_id = ?', [id]);
   await p.query('DELETE FROM itv WHERE id = ?', [id]);
 }
 
@@ -296,6 +340,7 @@ async function deleteChannels(ids) {
   const p = getPool();
   if (!ids.length) return;
   const placeholders = ids.map(() => '?').join(',');
+  await p.query(`DELETE FROM ch_links WHERE ch_id IN (${placeholders})`, ids);
   await p.query(`DELETE FROM itv WHERE id IN (${placeholders})`, ids);
 }
 
@@ -307,7 +352,11 @@ async function updateChannel(id, fields) {
   const vals = [];
   if (fields.name !== undefined) { sets.push('name = ?'); vals.push(fields.name); }
   if (fields.number !== undefined) { sets.push('number = ?'); vals.push(fields.number); }
-  if (fields.cmd !== undefined) { sets.push('cmd = ?'); vals.push(fields.cmd); }
+  if (fields.cmd !== undefined) {
+    sets.push('cmd = ?'); vals.push(fields.cmd);
+    // Also update ch_links
+    await upsertChLink(p, id, fields.cmd);
+  }
   if (fields.status !== undefined) { sets.push('status = ?'); vals.push(fields.status); }
   sets.push('modified = NOW()');
   vals.push(id);
