@@ -14,6 +14,7 @@ export interface Stream {
   bitrate?: string;
   resolution?: string;
   lastSynced?: string;
+  sortOrder: number;
 }
 
 export interface LogEntry {
