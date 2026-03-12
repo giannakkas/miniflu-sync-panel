@@ -1,9 +1,10 @@
 import React, { createContext, useContext, useState, useCallback } from "react";
+import { api } from "@/lib/api";
 
 interface AuthContextType {
   isAuthenticated: boolean;
   username: string;
-  login: (username: string, password: string) => boolean;
+  login: (username: string, password: string) => Promise<boolean>;
   logout: () => void;
 }
 
@@ -19,15 +20,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isAuthenticated, setIsAuthenticated] = useState(() => localStorage.getItem("miniflu_auth") === "true");
   const [username, setUsername] = useState(() => localStorage.getItem("miniflu_user") || "");
 
-  const login = useCallback((user: string, pass: string) => {
-    // Mock auth - accepts admin/admin
-    if (user === "admin" && pass === "admin") {
-      setIsAuthenticated(true);
-      setUsername(user);
-      localStorage.setItem("miniflu_auth", "true");
-      localStorage.setItem("miniflu_user", user);
-      return true;
-    }
+  const login = useCallback(async (user: string, pass: string) => {
+    try {
+      const result = await api.login(user, pass);
+      if (result.ok) {
+        setIsAuthenticated(true);
+        setUsername(user);
+        localStorage.setItem("miniflu_auth", "true");
+        localStorage.setItem("miniflu_user", user);
+        return true;
+      }
+    } catch {}
     return false;
   }, []);
 

@@ -19,12 +19,9 @@ const LoginPage = () => {
     setError("");
     setLoading(true);
     
-    // Simulate network delay
-    await new Promise(r => setTimeout(r, 600));
-    
-    const success = login(username, password);
+    const success = await login(username, password);
     if (!success) {
-      setError("Invalid credentials. Try admin / admin");
+      setError("Invalid credentials");
     }
     setLoading(false);
   };

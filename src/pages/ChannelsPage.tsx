@@ -1,18 +1,27 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/StatusBadge";
-import { mockChannels } from "@/lib/mock-data";
-import { Search, MonitorPlay, RefreshCw, Trash2 } from "lucide-react";
+import { api } from "@/lib/api";
+import { Search, MonitorPlay, Loader2 } from "lucide-react";
 
 const ChannelsPage = () => {
   const [search, setSearch] = useState("");
+  const [channels, setChannels] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const filtered = mockChannels.filter(ch =>
-    !search || ch.channelName.toLowerCase().includes(search.toLowerCase()) ||
-    ch.sourceStream.toLowerCase().includes(search.toLowerCase())
+  useEffect(() => {
+    api.getChannels()
+      .then(setChannels)
+      .catch(err => setError(err.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const filtered = channels.filter(ch =>
+    !search || ch.name?.toLowerCase().includes(search.toLowerCase()) ||
+    ch.sourceStream?.toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -32,56 +41,53 @@ const ChannelsPage = () => {
           </div>
         </Card>
 
-        <Card className="bg-card border border-border overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/50">
-                  <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Channel Name</th>
-                  <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Source Stream</th>
-                  <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden lg:table-cell">Output URL</th>
-                  <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Status</th>
-                  <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Last Updated</th>
-                  <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="text-center py-12 text-muted-foreground">
-                      <MonitorPlay className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                      <p>No channels found</p>
-                    </td>
+        {loading ? (
+          <div className="flex items-center justify-center h-32"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+        ) : error ? (
+          <Card className="p-8 text-center text-muted-foreground">
+            <MonitorPlay className="w-8 h-8 mx-auto mb-2 opacity-40" />
+            <p>Could not load channels: {error}</p>
+            <p className="text-xs mt-1">Make sure Ministra connection is configured in Settings</p>
+          </Card>
+        ) : (
+          <Card className="bg-card border border-border overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/50">
+                    <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Channel Name</th>
+                    <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Number</th>
+                    <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Source Stream</th>
+                    <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden lg:table-cell">CMD / URL</th>
+                    <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Status</th>
                   </tr>
-                ) : (
-                  filtered.map(ch => (
-                    <tr key={ch.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
-                      <td className="p-3 font-medium text-foreground">{ch.channelName}</td>
-                      <td className="p-3 font-mono text-foreground">{ch.sourceStream}</td>
-                      <td className="p-3 hidden lg:table-cell">
-                        <span className="font-mono text-xs text-muted-foreground truncate block max-w-[280px]" title={ch.outputUrl}>
-                          {ch.outputUrl}
-                        </span>
-                      </td>
-                      <td className="p-3"><StatusBadge status={ch.status} /></td>
-                      <td className="p-3 text-xs text-muted-foreground whitespace-nowrap">{ch.lastUpdated}</td>
-                      <td className="p-3">
-                        <div className="flex items-center gap-1">
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <RefreshCw className="w-3.5 h-3.5" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
-                        </div>
+                </thead>
+                <tbody>
+                  {filtered.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="text-center py-12 text-muted-foreground">
+                        <MonitorPlay className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                        <p>No channels found</p>
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+                  ) : (
+                    filtered.map(ch => (
+                      <tr key={ch.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                        <td className="p-3 font-medium text-foreground">{ch.name}</td>
+                        <td className="p-3 font-mono text-muted-foreground">{ch.number}</td>
+                        <td className="p-3 font-mono text-foreground">{ch.sourceStream || "—"}</td>
+                        <td className="p-3 hidden lg:table-cell">
+                          <span className="font-mono text-xs text-muted-foreground truncate block max-w-[280px]" title={ch.cmd}>{ch.cmd}</span>
+                        </td>
+                        <td className="p-3"><StatusBadge status={ch.status || "synced"} /></td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        )}
       </div>
     </DashboardLayout>
   );
