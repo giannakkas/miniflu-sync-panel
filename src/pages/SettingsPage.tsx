@@ -36,11 +36,11 @@ const SettingsPage = () => {
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Host</Label>
-                <Input defaultValue="172.18.181.12" className="h-10 font-mono" />
+                <Input placeholder="e.g. 172.18.181.12" className="h-10 font-mono" />
               </div>
               <div className="space-y-2">
                 <Label>Port</Label>
-                <Input defaultValue="8080" className="h-10 font-mono" />
+                <Input placeholder="e.g. 8080" className="h-10 font-mono" />
               </div>
               <div className="space-y-2">
                 <Label>Username</Label>
@@ -68,7 +68,7 @@ const SettingsPage = () => {
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label>API Base URL</Label>
-                <Input defaultValue="http://172.18.181.13:88/stalker_portal/api" className="h-10 font-mono text-sm" />
+                <Input placeholder="e.g. http://172.18.181.13:88/stalker_portal/api" className="h-10 font-mono text-sm" />
                 <p className="text-xs text-muted-foreground">Full URL including path to Stalker Portal API</p>
               </div>
               <div className="grid sm:grid-cols-2 gap-4">

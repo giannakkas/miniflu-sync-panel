@@ -75,23 +75,23 @@ const DashboardPage = () => {
             <div className="space-y-4">
               <div className="flex items-center justify-between py-2">
                 <span className="text-sm text-muted-foreground">Flussonic Connection</span>
-                <span className="text-sm font-medium text-[hsl(var(--status-synced))]">● Connected</span>
+                <span className="text-sm font-medium text-muted-foreground">● Not Configured</span>
               </div>
               <div className="flex items-center justify-between py-2">
                 <span className="text-sm text-muted-foreground">Ministra API</span>
-                <span className="text-sm font-medium text-[hsl(var(--status-synced))]">● Connected</span>
+                <span className="text-sm font-medium text-muted-foreground">● Not Configured</span>
               </div>
               <div className="flex items-center justify-between py-2">
                 <span className="text-sm text-muted-foreground">Last Full Sync</span>
-                <span className="text-sm text-foreground">2026-03-12 08:30</span>
+                <span className="text-sm text-muted-foreground">Never</span>
               </div>
               <div className="flex items-center justify-between py-2">
                 <span className="text-sm text-muted-foreground">Flussonic Host</span>
-                <span className="text-sm text-foreground font-mono">172.18.181.12:8080</span>
+                <span className="text-sm text-muted-foreground font-mono">—</span>
               </div>
               <div className="flex items-center justify-between py-2">
                 <span className="text-sm text-muted-foreground">Ministra API</span>
-                <span className="text-sm text-foreground font-mono text-xs">172.18.181.13:88</span>
+                <span className="text-sm text-muted-foreground font-mono">—</span>
               </div>
             </div>
           </Card>

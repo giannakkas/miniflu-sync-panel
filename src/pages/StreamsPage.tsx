@@ -237,7 +237,7 @@ const StreamsPage = () => {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div>
             <h1 className="text-2xl font-bold text-foreground">Streams</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">Flussonic Output Streams · Last sync: 2026-03-12 08:30</p>
+            <p className="text-sm text-muted-foreground mt-0.5">Flussonic Output Streams</p>
           </div>
           <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing}>
             <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
