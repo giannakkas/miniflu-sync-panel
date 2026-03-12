@@ -13,57 +13,8 @@ import { api } from "@/lib/api";
 import type { Stream } from "@/lib/mock-data";
 import { toast } from "sonner";
 import {
-  DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent,
-} from "@dnd-kit/core";
-import {
-  arrayMove, SortableContext, useSortable, verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import {
-  RefreshCw, Search, Send, Eye, CheckCircle, XCircle, AlertTriangle, List, Loader2, GripVertical,
+  RefreshCw, Search, Send, Eye, CheckCircle, XCircle, AlertTriangle, List, Loader2,
 } from "lucide-react";
-
-function SortableRow({ stream, selected, syncing, onToggleSelect, onView, onSend }: {
-  stream: Stream; selected: boolean; syncing: boolean;
-  onToggleSelect: () => void; onView: () => void; onSend: () => void;
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: stream.id });
-  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1, position: "relative" as const, zIndex: isDragging ? 10 : undefined };
-
-  return (
-    <tr ref={setNodeRef} style={style}
-      className={`border-b border-border last:border-0 hover:bg-muted/30 transition-colors ${selected ? "bg-primary/5" : ""} ${isDragging ? "bg-muted shadow-lg" : ""}`}>
-      <td className="p-3 w-10">
-        <button {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground touch-none" tabIndex={-1}>
-          <GripVertical className="w-4 h-4" />
-        </button>
-      </td>
-      <td className="p-3 text-center text-xs font-mono text-muted-foreground font-semibold w-14">{stream.sortOrder}</td>
-      <td className="p-3 w-10"><Checkbox checked={selected} onCheckedChange={onToggleSelect} /></td>
-      <td className="p-3 font-mono text-foreground font-medium">{stream.streamKey}</td>
-      <td className="p-3 font-medium text-foreground">{stream.title}</td>
-      <td className="p-3 hidden xl:table-cell">
-        <span className="font-mono text-xs text-muted-foreground truncate block max-w-[280px]" title={stream.outputUrl}>{stream.outputUrl}</span>
-      </td>
-      <td className="p-3"><StatusBadge status={stream.status} /></td>
-      <td className="p-3 hidden lg:table-cell">
-        {stream.ministraMatch ? (
-          <span className="text-xs text-[hsl(var(--status-synced))] font-medium">✓ {stream.ministraChannelName}</span>
-        ) : (
-          <span className="text-xs text-muted-foreground">—</span>
-        )}
-      </td>
-      <td className="p-3">
-        <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onView}><Eye className="w-3.5 h-3.5" /></Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onSend} disabled={syncing}>
-            {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-          </Button>
-        </div>
-      </td>
-    </tr>
-  );
-}
 
 const StreamsPage = () => {
   const [streams, setStreams] = useState<Stream[]>([]);
@@ -95,16 +46,13 @@ const StreamsPage = () => {
         lastSynced: s.last_synced,
         sortOrder: s.sort_order || (i + 1),
       })));
-    } catch (err) {
-      // Empty state is fine on first load
+    } catch {
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => { loadStreams(); }, [loadStreams]);
-
-  const isFiltering = search !== "" || statusFilter !== "all";
 
   const filtered = useMemo(() =>
     streams.filter(s => {
@@ -115,25 +63,10 @@ const StreamsPage = () => {
     [streams, search, statusFilter]
   );
 
-  const { paginatedItems, currentPage, pageSize, totalItems, setCurrentPage, handlePageSizeChange } = usePagination(filtered, 10);
-
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), useSensor(KeyboardSensor));
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    setStreams(prev => {
-      const oldIndex = prev.findIndex(s => s.id === active.id);
-      const newIndex = prev.findIndex(s => s.id === over.id);
-      const reordered = arrayMove(prev, oldIndex, newIndex).map((s, i) => ({ ...s, sortOrder: i + 1 }));
-      api.reorderStreams(reordered.map(s => ({ streamKey: s.streamKey, sortOrder: s.sortOrder }))).catch(() => {});
-      return reordered;
-    });
-    toast.success("Channel order updated");
-  };
+  const { paginatedItems, currentPage, pageSize, totalItems, setCurrentPage, handlePageSizeChange } = usePagination(filtered, 20);
 
   const total = streams.length;
-  const synced = streams.filter(s => ["synced", "updated"].includes(s.status)).length;
+  const synced = streams.filter(s => ["synced", "updated", "already_exists"].includes(s.status)).length;
   const notSynced = streams.filter(s => s.status === "not_synced").length;
   const failed = streams.filter(s => s.status === "failed").length;
 
@@ -241,8 +174,6 @@ const StreamsPage = () => {
                   <SelectItem value="synced">Synced</SelectItem>
                   <SelectItem value="not_synced">Not Synced</SelectItem>
                   <SelectItem value="failed">Failed</SelectItem>
-                  <SelectItem value="updated">Updated</SelectItem>
-                  <SelectItem value="already_exists">Already Exists</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -254,47 +185,63 @@ const StreamsPage = () => {
               </Button>
             </div>
           </div>
-          {isFiltering && <p className="text-xs text-muted-foreground mt-2">⚠ Drag-and-drop sorting is disabled while filters are active.</p>}
         </Card>
 
         <Card className="bg-card border border-border overflow-hidden">
           <div className="overflow-x-auto">
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-muted/50">
-                    <th className="text-left p-3 w-10"></th>
-                    <th className="text-center p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider w-14">#</th>
-                    <th className="text-left p-3 w-10">
-                      <Checkbox checked={filtered.length > 0 && filtered.every(s => selectedSet.has(s.id))} onCheckedChange={(c) => c ? selectAll() : deselectAll()} />
-                    </th>
-                    <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Stream Key</th>
-                    <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Title</th>
-                    <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden xl:table-cell">Output URL</th>
-                    <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Status</th>
-                    <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden lg:table-cell">Ministra Match</th>
-                    <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Actions</th>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/50">
+                  <th className="text-left p-3 w-10">
+                    <Checkbox checked={filtered.length > 0 && filtered.every(s => selectedSet.has(s.id))} onCheckedChange={(c) => c ? selectAll() : deselectAll()} />
+                  </th>
+                  <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Stream Key</th>
+                  <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Title</th>
+                  <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden xl:table-cell">Output URL</th>
+                  <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Status</th>
+                  <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden lg:table-cell">Ministra Match</th>
+                  <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paginatedItems.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="text-center py-12 text-muted-foreground">
+                      <List className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                      <p>{streams.length === 0 ? "No streams yet. Click 'Refresh from Flussonic' to fetch streams." : "No streams match your filter"}</p>
+                    </td>
                   </tr>
-                </thead>
-                <SortableContext items={paginatedItems.map(s => s.id)} strategy={verticalListSortingStrategy} disabled={isFiltering}>
-                  <tbody>
-                    {paginatedItems.length === 0 ? (
-                      <tr>
-                        <td colSpan={9} className="text-center py-12 text-muted-foreground">
-                          <List className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                          <p>{streams.length === 0 ? "No streams yet. Click 'Refresh from Flussonic' to fetch streams." : "No streams match your filter"}</p>
-                        </td>
-                      </tr>
-                    ) : (
-                      paginatedItems.map(stream => (
-                        <SortableRow key={stream.id} stream={stream} selected={selectedSet.has(stream.id)} syncing={syncing.has(stream.id)}
-                          onToggleSelect={() => toggleSelect(stream.id)} onView={() => setDrawerStream(stream)} onSend={() => handleSendOneClick(stream)} />
-                      ))
-                    )}
-                  </tbody>
-                </SortableContext>
-              </table>
-            </DndContext>
+                ) : (
+                  paginatedItems.map(stream => (
+                    <tr key={stream.id}
+                      className={`border-b border-border last:border-0 hover:bg-muted/30 transition-colors ${selectedSet.has(stream.id) ? "bg-primary/5" : ""}`}>
+                      <td className="p-3 w-10"><Checkbox checked={selectedSet.has(stream.id)} onCheckedChange={() => toggleSelect(stream.id)} /></td>
+                      <td className="p-3 font-mono text-foreground font-medium">{stream.streamKey}</td>
+                      <td className="p-3 font-medium text-foreground">{stream.title}</td>
+                      <td className="p-3 hidden xl:table-cell">
+                        <span className="font-mono text-xs text-muted-foreground truncate block max-w-[280px]" title={stream.outputUrl}>{stream.outputUrl}</span>
+                      </td>
+                      <td className="p-3"><StatusBadge status={stream.status} /></td>
+                      <td className="p-3 hidden lg:table-cell">
+                        {stream.ministraMatch ? (
+                          <span className="text-xs text-[hsl(var(--status-synced))] font-medium">✓ {stream.ministraChannelName}</span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="p-3">
+                        <div className="flex items-center gap-1">
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setDrawerStream(stream)}><Eye className="w-3.5 h-3.5" /></Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleSendOneClick(stream)} disabled={syncing.has(stream.id)}>
+                            {syncing.has(stream.id) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
           <TablePagination currentPage={currentPage} totalItems={totalItems} pageSize={pageSize} onPageChange={setCurrentPage} onPageSizeChange={handlePageSizeChange} />
         </Card>

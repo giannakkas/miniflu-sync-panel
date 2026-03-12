@@ -247,10 +247,10 @@ function scheduleAutoSync() {
   cronJob = cron.schedule(`*/${minutes} * * * *`, async () => {
     console.log(`[scheduler] Auto-sync triggered (every ${minutes}m)`);
     try {
+      // Only refresh from Flussonic and reconcile with Ministra
+      // Does NOT force-sync unsynced streams — user must do that manually
       await refreshFromFlussonic();
-      const results = await syncStreamKeys(null);
-      db.setSyncState('last_full_sync', new Date().toISOString());
-      console.log(`[scheduler] Done: ${results.success} created, ${results.updated} updated, ${results.failed} failed`);
+      console.log(`[scheduler] Refresh + reconcile done`);
     } catch (err) {
       console.error(`[scheduler] Error: ${err.message}`);
       db.addLog({ action: 'auto_sync', result: 'failed', details: err.message });
