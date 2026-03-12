@@ -198,7 +198,7 @@ const StreamsPage = () => {
               <tbody>
                 {paginatedItems.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="text-center py-12 text-muted-foreground">
+                    <td colSpan={7} className="text-center py-12 text-muted-foreground">
                       <List className="w-8 h-8 mx-auto mb-2 opacity-40" />
                       <p>No streams found</p>
                     </td>
