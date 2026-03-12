@@ -111,10 +111,11 @@ const ChannelsPage = () => {
       const oldIndex = prev.findIndex(ch => ch.id === active.id);
       const newIndex = prev.findIndex(ch => ch.id === over.id);
       const reordered = arrayMove(prev, oldIndex, newIndex).map((ch, i) => ({ ...ch, number: i + 1 }));
-      api.reorderChannels(reordered.map(ch => ({ id: ch.id, number: ch.number }))).catch(() => {});
+      api.reorderChannels(reordered.map(ch => ({ id: ch.id, number: ch.number })))
+        .then(() => toast.success("Channel order saved to Ministra"))
+        .catch((err: any) => toast.error(`Reorder failed: ${err.message}`));
       return reordered;
     });
-    toast.success("Channel order updated");
   };
 
   const handleRefresh = async () => {

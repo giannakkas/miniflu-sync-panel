@@ -371,8 +371,9 @@ async function updateChannel(id, fields) {
 async function reorderChannels(order) {
   const p = getPool();
   for (const item of order) {
-    await p.query('UPDATE itv SET number = ? WHERE id = ?', [item.number, item.id]);
+    await p.query('UPDATE itv SET number = ?, modified = NOW() WHERE id = ?', [item.number, item.id]);
   }
+  console.log(`[ministra] Reordered ${order.length} channels`);
 }
 
 // ── Close ───────────────────────────────────────────────────────────
