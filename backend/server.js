@@ -236,7 +236,14 @@ app.put('/api/channels/reorder', async (req, res) => {
   try {
     const { order } = req.body;
     if (!Array.isArray(order)) return res.status(400).json({ error: 'order must be an array' });
-    await ministra.reorderChannels(order);
+    // Ensure all values are integers
+    const parsed = order.map(item => ({
+      id: parseInt(item.id, 10),
+      number: parseInt(item.number, 10),
+    })).filter(item => !isNaN(item.id) && !isNaN(item.number));
+    console.log(`[reorder] Received ${order.length} items, valid: ${parsed.length}`);
+    if (parsed.length === 0) return res.status(400).json({ error: 'No valid items to reorder' });
+    await ministra.reorderChannels(parsed);
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
