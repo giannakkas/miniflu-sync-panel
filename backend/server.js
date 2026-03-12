@@ -226,7 +226,8 @@ app.post('/api/admin/reset', async (req, res) => {
   db.db.exec('DELETE FROM streams');
   db.db.exec('DELETE FROM logs');
   db.db.exec('DELETE FROM sync_state');
-  res.json({ ok: true, message: 'Local cache cleared. Refresh to pull fresh data.' });
+  // Settings are preserved
+  res.json({ ok: true, message: 'Streams, logs, sync state cleared. Settings preserved.' });
 });
 
 // ─── SPA fallback ───────────────────────────────────────────────────
