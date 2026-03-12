@@ -226,7 +226,7 @@ const StreamsPage = () => {
                             {stream.outputUrl}
                           </span>
                         </td>
-                        <td className="p-3"><ProtocolBadge protocol={stream.protocol} /></td>
+                        
                         <td className="p-3"><StatusBadge status={stream.status} /></td>
                         <td className="p-3 hidden lg:table-cell">
                           {stream.ministraMatch ? (
