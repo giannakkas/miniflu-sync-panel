@@ -7,19 +7,13 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { StatusBadge, ProtocolBadge } from "@/components/StatusBadge";
 import { StreamDetailDrawer } from "@/components/StreamDetailDrawer";
-import { mockStreams, type Stream, type SyncStatus } from "@/lib/mock-data";
+import { SyncConfirmDialog } from "@/components/SyncConfirmDialog";
+import { TablePagination, usePagination } from "@/components/TablePagination";
+import { mockStreams, type Stream } from "@/lib/mock-data";
 import { toast } from "sonner";
 import {
-  RefreshCw,
-  Search,
-  Send,
-  Eye,
-  Upload,
-  CheckCircle,
-  XCircle,
-  AlertTriangle,
-  List,
-  Loader2,
+  RefreshCw, Search, Send, Eye, Upload,
+  CheckCircle, XCircle, AlertTriangle, List, Loader2,
 } from "lucide-react";
 
 const StreamsPage = () => {
@@ -30,14 +24,26 @@ const StreamsPage = () => {
   const [drawerStream, setDrawerStream] = useState<Stream | null>(null);
   const [syncing, setSyncing] = useState<Set<string>>(new Set());
   const [refreshing, setRefreshing] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmLoading, setConfirmLoading] = useState(false);
+  const [confirmSingle, setConfirmSingle] = useState<Stream | null>(null);
 
   const filtered = streams.filter(s => {
-    const matchSearch = !search || 
+    const matchSearch = !search ||
       s.title.toLowerCase().includes(search.toLowerCase()) ||
       s.streamKey.toLowerCase().includes(search.toLowerCase());
     const matchStatus = statusFilter === "all" || s.status === statusFilter;
     return matchSearch && matchStatus;
   });
+
+  const {
+    paginatedItems,
+    currentPage,
+    pageSize,
+    totalItems,
+    setCurrentPage,
+    handlePageSizeChange,
+  } = usePagination(filtered, 10);
 
   const total = streams.length;
   const synced = streams.filter(s => ["synced", "updated"].includes(s.status)).length;
@@ -53,20 +59,31 @@ const StreamsPage = () => {
   const selectAll = () => setSelected(new Set(filtered.map(s => s.id)));
   const deselectAll = () => setSelected(new Set());
 
-  const handleSendSelected = async () => {
-    const ids = Array.from(selected);
+  const streamsToConfirm = confirmSingle
+    ? [confirmSingle]
+    : streams.filter(s => selected.has(s.id));
+
+  const handleSendSelectedClick = () => {
+    setConfirmSingle(null);
+    setConfirmOpen(true);
+  };
+
+  const handleSendOneClick = (stream: Stream) => {
+    setConfirmSingle(stream);
+    setConfirmOpen(true);
+  };
+
+  const handleConfirmSend = async () => {
+    const ids = streamsToConfirm.map(s => s.id);
+    setConfirmLoading(true);
     setSyncing(new Set(ids));
     await new Promise(r => setTimeout(r, 1500));
     setSyncing(new Set());
+    setConfirmLoading(false);
+    setConfirmOpen(false);
     toast.success(`${ids.length} stream(s) sent to Ministra`, { description: "Channel names created from stream titles" });
-    setSelected(new Set());
-  };
-
-  const handleSendOne = async (stream: Stream) => {
-    setSyncing(new Set([stream.id]));
-    await new Promise(r => setTimeout(r, 1000));
-    setSyncing(new Set());
-    toast.success(`"${stream.title}" sent to Ministra`);
+    if (!confirmSingle) setSelected(new Set());
+    setConfirmSingle(null);
   };
 
   const handleRefresh = async () => {
@@ -122,11 +139,11 @@ const StreamsPage = () => {
                 <Input
                   placeholder="Search streams..."
                   value={search}
-                  onChange={e => setSearch(e.target.value)}
+                  onChange={e => { setSearch(e.target.value); setCurrentPage(1); }}
                   className="pl-9 h-9 w-64"
                 />
               </div>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setCurrentPage(1); }}>
                 <SelectTrigger className="w-40 h-9">
                   <SelectValue placeholder="Filter status" />
                 </SelectTrigger>
@@ -146,7 +163,7 @@ const StreamsPage = () => {
               <Button variant="outline" size="sm" onClick={deselectAll}>Deselect All</Button>
               <Button
                 size="sm"
-                onClick={handleSendSelected}
+                onClick={handleSendSelectedClick}
                 disabled={selected.size === 0}
                 className="font-semibold"
               >
@@ -179,7 +196,7 @@ const StreamsPage = () => {
                 </tr>
               </thead>
               <tbody>
-                {filtered.length === 0 ? (
+                {paginatedItems.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="text-center py-12 text-muted-foreground">
                       <List className="w-8 h-8 mx-auto mb-2 opacity-40" />
@@ -187,7 +204,7 @@ const StreamsPage = () => {
                     </td>
                   </tr>
                 ) : (
-                  filtered.map(stream => {
+                  paginatedItems.map(stream => {
                     const isSyncing = syncing.has(stream.id);
                     return (
                       <tr
@@ -227,7 +244,7 @@ const StreamsPage = () => {
                               variant="ghost"
                               size="icon"
                               className="h-8 w-8"
-                              onClick={() => handleSendOne(stream)}
+                              onClick={() => handleSendOneClick(stream)}
                               disabled={isSyncing}
                             >
                               {isSyncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
@@ -244,10 +261,24 @@ const StreamsPage = () => {
               </tbody>
             </table>
           </div>
+          <TablePagination
+            currentPage={currentPage}
+            totalItems={totalItems}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={handlePageSizeChange}
+          />
         </Card>
       </div>
 
       <StreamDetailDrawer stream={drawerStream} onClose={() => setDrawerStream(null)} />
+      <SyncConfirmDialog
+        open={confirmOpen}
+        streams={streamsToConfirm}
+        onConfirm={handleConfirmSend}
+        onCancel={() => { setConfirmOpen(false); setConfirmSingle(null); }}
+        loading={confirmLoading}
+      />
     </DashboardLayout>
   );
 };
