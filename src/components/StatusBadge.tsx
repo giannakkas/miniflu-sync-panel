@@ -23,7 +23,7 @@ const protocolConfig: Record<Protocol, string> = {
 };
 
 export function ProtocolBadge({ protocol }: { protocol: Protocol }) {
-  return <Badge className={cn("font-medium text-xs", protocolConfig[protocol])}>{protocol}</Badge>;
+  return <Badge variant="outline" className={cn("font-medium text-xs border-0", protocolConfig[protocol])}>{protocol}</Badge>;
 }
 
 const logResultConfig: Record<LogResult, { label: string; className: string }> = {
