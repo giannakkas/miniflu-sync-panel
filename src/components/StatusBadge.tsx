@@ -35,5 +35,5 @@ const logResultConfig: Record<LogResult, { label: string; className: string }> =
 
 export function LogResultBadge({ result }: { result: LogResult }) {
   const config = logResultConfig[result];
-  return <Badge className={cn("font-medium text-xs", config.className)}>{config.label}</Badge>;
+  return <Badge variant="outline" className={cn("font-medium text-xs border-0", config.className)}>{config.label}</Badge>;
 }
