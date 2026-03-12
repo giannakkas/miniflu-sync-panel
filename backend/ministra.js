@@ -241,35 +241,68 @@ async function syncStream(streamKey, title, outputUrl, sortOrder) {
 // ── Bidirectional sync: Ministra → Panel status ─────────────────────
 
 /**
- * Read all Ministra channels and update panel stream statuses to match.
- * Streams in Flussonic that already exist in Ministra get marked 'synced'.
+ * Read all Ministra channels and update panel stream statuses.
+ * Simple binary: if stream exists in Ministra → synced, if not → not_synced.
  */
 async function reconcileWithPanel(localDb) {
   const p = getPool();
   const [rows] = await p.query('SELECT id, name, number, cmd, status FROM itv ORDER BY number ASC');
 
-  let matched = 0;
-  let unmatched = 0;
+  // First, mark ALL streams as not_synced
+  localDb.db.exec("UPDATE streams SET status = 'not_synced', ministra_channel_name = NULL, ministra_channel_id = NULL");
 
+  // Build set of stream keys in Ministra
+  let matched = 0;
   for (const ch of rows) {
     const streamKey = extractStreamKey(ch.cmd);
-    if (!streamKey) { unmatched++; continue; }
+    if (!streamKey) continue;
 
     const stream = localDb.getStreamByKey(streamKey);
     if (stream) {
-      localDb.updateStreamSync(
-        streamKey,
-        ch.status === 1 ? 'synced' : 'not_synced',
-        ch.name,
-        ch.id
-      );
+      localDb.updateStreamSync(streamKey, 'synced', ch.name, ch.id);
       matched++;
-    } else {
-      unmatched++;
     }
   }
 
-  return { matched, unmatched, total: rows.length };
+  return { matched, unmatched: rows.length - matched, total: rows.length };
+}
+
+// ── Delete channel ──────────────────────────────────────────────────
+
+async function deleteChannel(id) {
+  const p = getPool();
+  await p.query('DELETE FROM itv WHERE id = ?', [id]);
+}
+
+async function deleteChannels(ids) {
+  const p = getPool();
+  if (!ids.length) return;
+  const placeholders = ids.map(() => '?').join(',');
+  await p.query(`DELETE FROM itv WHERE id IN (${placeholders})`, ids);
+}
+
+// ── Update channel ──────────────────────────────────────────────────
+
+async function updateChannel(id, fields) {
+  const p = getPool();
+  const sets = [];
+  const vals = [];
+  if (fields.name !== undefined) { sets.push('name = ?'); vals.push(fields.name); }
+  if (fields.number !== undefined) { sets.push('number = ?'); vals.push(fields.number); }
+  if (fields.cmd !== undefined) { sets.push('cmd = ?'); vals.push(fields.cmd); }
+  if (fields.status !== undefined) { sets.push('status = ?'); vals.push(fields.status); }
+  sets.push('modified = NOW()');
+  vals.push(id);
+  await p.query(`UPDATE itv SET ${sets.join(', ')} WHERE id = ?`, vals);
+}
+
+// ── Reorder channels ────────────────────────────────────────────────
+
+async function reorderChannels(order) {
+  const p = getPool();
+  for (const item of order) {
+    await p.query('UPDATE itv SET number = ? WHERE id = ?', [item.number, item.id]);
+  }
 }
 
 // ── Close ───────────────────────────────────────────────────────────
@@ -285,5 +318,5 @@ module.exports = {
   testConnection, testDbConnection, testApiConnection,
   getChannels, findChannelByCmd,
   syncStream, reconcileWithPanel, close, extractStreamKey,
-  getItvColumns,
+  getItvColumns, deleteChannel, deleteChannels, updateChannel, reorderChannels,
 };

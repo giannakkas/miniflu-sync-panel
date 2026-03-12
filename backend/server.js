@@ -56,7 +56,7 @@ app.post('/api/test/ministra', async (req, res) => {
 app.get('/api/dashboard', (req, res) => {
   const streams = db.getAllStreams();
   const total = streams.length;
-  const synced = streams.filter(s => ['synced', 'updated', 'already_exists'].includes(s.status)).length;
+  const synced = streams.filter(s => s.status === 'synced').length;
   const notSynced = streams.filter(s => s.status === 'not_synced').length;
   const failed = streams.filter(s => s.status === 'failed').length;
   const fHost = db.getSetting('flussonic_host');
@@ -145,10 +145,10 @@ async function syncStreamKeys(streamKeys) {
         stream.stream_key, stream.title, stream.output_url, stream.sort_order
       );
 
-      let status;
-      if (result.action === 'created') { status = 'synced'; results.success++; }
-      else if (result.action === 'updated') { status = 'updated'; results.updated++; }
-      else { status = 'synced'; results.skipped++; }
+      let status = 'synced';
+      if (result.action === 'created') { results.success++; }
+      else if (result.action === 'updated') { results.updated++; }
+      else { results.skipped++; }
 
       db.updateStreamSync(stream.stream_key, status, result.channelName, result.channelId);
       db.addLog({
@@ -207,6 +207,38 @@ app.get('/api/sync/status', (req, res) => {
 app.get('/api/channels', async (req, res) => {
   try { res.json(await ministra.getChannels()); }
   catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/api/channels/:id', async (req, res) => {
+  try {
+    await ministra.updateChannel(parseInt(req.params.id), req.body);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/channels/:id', async (req, res) => {
+  try {
+    await ministra.deleteChannel(parseInt(req.params.id));
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/channels/delete-batch', async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids)) return res.status(400).json({ error: 'ids must be an array' });
+    await ministra.deleteChannels(ids);
+    res.json({ ok: true, deleted: ids.length });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/api/channels/reorder', async (req, res) => {
+  try {
+    const { order } = req.body;
+    if (!Array.isArray(order)) return res.status(400).json({ error: 'order must be an array' });
+    await ministra.reorderChannels(order);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ─── LOGS ───────────────────────────────────────────────────────────

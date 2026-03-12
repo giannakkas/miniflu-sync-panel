@@ -46,6 +46,14 @@ export const api = {
 
   // Channels
   getChannels: () => request('GET', '/channels'),
+  updateChannel: (id: number, fields: Record<string, any>) =>
+    request('PUT', `/channels/${id}`, fields),
+  deleteChannel: (id: number) =>
+    request('DELETE', `/channels/${id}`),
+  deleteChannelsBatch: (ids: number[]) =>
+    request('POST', '/channels/delete-batch', { ids }),
+  reorderChannels: (order: { id: number; number: number }[]) =>
+    request('PUT', '/channels/reorder', { order }),
 
   // Logs
   getLogs: (limit = 100, offset = 0) =>

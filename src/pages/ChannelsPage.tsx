@@ -3,6 +3,7 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { StatusBadge } from "@/components/StatusBadge";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
@@ -13,7 +14,7 @@ import {
   arrayMove, SortableContext, useSortable, verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Search, MonitorPlay, Loader2, GripVertical, RefreshCw } from "lucide-react";
+import { Search, MonitorPlay, Loader2, GripVertical, RefreshCw, Trash2, Pencil, X, Check } from "lucide-react";
 
 interface Channel {
   id: number;
@@ -24,25 +25,54 @@ interface Channel {
   status: string;
 }
 
-function SortableRow({ ch, index }: { ch: Channel; index: number }) {
+function SortableRow({ ch, selected, onToggle, onEdit, onDelete, editing, editData, setEditData, onSaveEdit, onCancelEdit }: {
+  ch: Channel; selected: boolean; onToggle: () => void;
+  onEdit: () => void; onDelete: () => void;
+  editing: boolean; editData: { name: string; cmd: string } | null;
+  setEditData: (d: { name: string; cmd: string }) => void;
+  onSaveEdit: () => void; onCancelEdit: () => void;
+}) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: ch.id });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1, position: "relative" as const, zIndex: isDragging ? 10 : undefined };
 
   return (
     <tr ref={setNodeRef} style={style}
-      className={`border-b border-border last:border-0 hover:bg-muted/30 transition-colors ${isDragging ? "bg-muted shadow-lg" : ""}`}>
+      className={`border-b border-border last:border-0 hover:bg-muted/30 transition-colors ${isDragging ? "bg-muted shadow-lg" : ""} ${selected ? "bg-primary/5" : ""}`}>
       <td className="p-3 w-10">
         <button {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground touch-none" tabIndex={-1}>
           <GripVertical className="w-4 h-4" />
         </button>
       </td>
+      <td className="p-3 w-10"><Checkbox checked={selected} onCheckedChange={onToggle} /></td>
       <td className="p-3 text-center text-xs font-mono text-muted-foreground font-semibold w-14">{ch.number}</td>
-      <td className="p-3 font-medium text-foreground">{ch.name}</td>
-      <td className="p-3 font-mono text-foreground">{ch.sourceStream || "—"}</td>
-      <td className="p-3 hidden lg:table-cell">
-        <span className="font-mono text-xs text-muted-foreground truncate block max-w-[280px]" title={ch.cmd}>{ch.cmd}</span>
+      <td className="p-3 font-medium text-foreground">
+        {editing && editData ? (
+          <Input value={editData.name} onChange={e => setEditData({ ...editData, name: e.target.value })} className="h-8 text-sm" />
+        ) : ch.name}
       </td>
-      <td className="p-3"><StatusBadge status={ch.status || "synced"} /></td>
+      <td className="p-3 font-mono text-foreground text-xs">{ch.sourceStream || "—"}</td>
+      <td className="p-3 hidden lg:table-cell">
+        {editing && editData ? (
+          <Input value={editData.cmd} onChange={e => setEditData({ ...editData, cmd: e.target.value })} className="h-8 text-xs font-mono" />
+        ) : (
+          <span className="font-mono text-xs text-muted-foreground truncate block max-w-[280px]" title={ch.cmd}>{ch.cmd}</span>
+        )}
+      </td>
+      <td className="p-3">
+        <div className="flex items-center gap-1">
+          {editing ? (
+            <>
+              <Button variant="ghost" size="icon" className="h-7 w-7 text-green-500" onClick={onSaveEdit}><Check className="w-3.5 h-3.5" /></Button>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onCancelEdit}><X className="w-3.5 h-3.5" /></Button>
+            </>
+          ) : (
+            <>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onEdit}><Pencil className="w-3.5 h-3.5" /></Button>
+              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={onDelete}><Trash2 className="w-3.5 h-3.5" /></Button>
+            </>
+          )}
+        </div>
+      </td>
     </tr>
   );
 }
@@ -53,6 +83,10 @@ const ChannelsPage = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedSet, setSelectedSet] = useState<Set<number>>(new Set());
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editData, setEditData] = useState<{ name: string; cmd: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const loadChannels = useCallback(async () => {
     try {
@@ -77,8 +111,7 @@ const ChannelsPage = () => {
       const oldIndex = prev.findIndex(ch => ch.id === active.id);
       const newIndex = prev.findIndex(ch => ch.id === over.id);
       const reordered = arrayMove(prev, oldIndex, newIndex).map((ch, i) => ({ ...ch, number: i + 1 }));
-      // Save new order to backend
-      api.reorderStreams(reordered.map(ch => ({ streamKey: ch.sourceStream, sortOrder: ch.number }))).catch(() => {});
+      api.reorderChannels(reordered.map(ch => ({ id: ch.id, number: ch.number }))).catch(() => {});
       return reordered;
     });
     toast.success("Channel order updated");
@@ -90,8 +123,64 @@ const ChannelsPage = () => {
     setRefreshing(false);
   };
 
-  const isSearching = search !== "";
+  const toggleSelect = (id: number) => {
+    const next = new Set(selectedSet);
+    next.has(id) ? next.delete(id) : next.add(id);
+    setSelectedSet(next);
+  };
+  const selectAll = () => setSelectedSet(new Set(filtered.map(ch => ch.id)));
+  const deselectAll = () => setSelectedSet(new Set());
 
+  const handleDeleteSelected = async () => {
+    if (!confirm(`Delete ${selectedSet.size} channel(s) from Ministra?`)) return;
+    setDeleting(true);
+    try {
+      await api.deleteChannelsBatch(Array.from(selectedSet));
+      toast.success(`${selectedSet.size} channel(s) deleted`);
+      setSelectedSet(new Set());
+      await loadChannels();
+    } catch (err: any) {
+      toast.error(`Delete failed: ${err.message}`);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleDeleteOne = async (id: number) => {
+    if (!confirm("Delete this channel from Ministra?")) return;
+    try {
+      await api.deleteChannel(id);
+      toast.success("Channel deleted");
+      await loadChannels();
+    } catch (err: any) {
+      toast.error(`Delete failed: ${err.message}`);
+    }
+  };
+
+  const handleEdit = (ch: Channel) => {
+    setEditingId(ch.id);
+    setEditData({ name: ch.name, cmd: ch.cmd });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingId || !editData) return;
+    try {
+      await api.updateChannel(editingId, editData);
+      toast.success("Channel updated");
+      setEditingId(null);
+      setEditData(null);
+      await loadChannels();
+    } catch (err: any) {
+      toast.error(`Update failed: ${err.message}`);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setEditData(null);
+  };
+
+  const isSearching = search !== "";
   const filtered = channels.filter(ch =>
     !search || ch.name?.toLowerCase().includes(search.toLowerCase()) ||
     ch.sourceStream?.toLowerCase().includes(search.toLowerCase())
@@ -103,7 +192,9 @@ const ChannelsPage = () => {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div>
             <h1 className="text-2xl font-bold text-foreground">Synced Channels</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">Channels currently in Ministra — drag to reorder</p>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              {channels.length} channel{channels.length !== 1 ? "s" : ""} in Ministra — drag to reorder
+            </p>
           </div>
           <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing}>
             <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
@@ -112,9 +203,21 @@ const ChannelsPage = () => {
         </div>
 
         <Card className="p-4 mb-4 bg-card border border-border">
-          <div className="relative w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input placeholder="Search channels..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9" />
+          <div className="flex flex-col lg:flex-row gap-3 items-start lg:items-center justify-between">
+            <div className="relative w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input placeholder="Search channels..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9" />
+            </div>
+            <div className="flex flex-wrap gap-2 items-center">
+              <Button variant="outline" size="sm" onClick={selectAll}>Select All</Button>
+              <Button variant="outline" size="sm" onClick={deselectAll}>Deselect All</Button>
+              {selectedSet.size > 0 && (
+                <Button variant="destructive" size="sm" onClick={handleDeleteSelected} disabled={deleting}>
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  {deleting ? "Deleting..." : `Delete Selected (${selectedSet.size})`}
+                </Button>
+              )}
+            </div>
           </div>
           {isSearching && <p className="text-xs text-muted-foreground mt-2">⚠ Drag-and-drop sorting is disabled while searching.</p>}
         </Card>
@@ -135,25 +238,39 @@ const ChannelsPage = () => {
                   <thead>
                     <tr className="border-b border-border bg-muted/50">
                       <th className="text-left p-3 w-10"></th>
+                      <th className="text-left p-3 w-10">
+                        <Checkbox checked={filtered.length > 0 && filtered.every(ch => selectedSet.has(ch.id))} onCheckedChange={(c) => c ? selectAll() : deselectAll()} />
+                      </th>
                       <th className="text-center p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider w-14">#</th>
                       <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Channel Name</th>
                       <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Source Stream</th>
                       <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden lg:table-cell">CMD / URL</th>
-                      <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Status</th>
+                      <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
                   <SortableContext items={filtered.map(ch => ch.id)} strategy={verticalListSortingStrategy} disabled={isSearching}>
                     <tbody>
                       {filtered.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="text-center py-12 text-muted-foreground">
+                          <td colSpan={7} className="text-center py-12 text-muted-foreground">
                             <MonitorPlay className="w-8 h-8 mx-auto mb-2 opacity-40" />
                             <p>No channels found</p>
                           </td>
                         </tr>
                       ) : (
-                        filtered.map((ch, i) => (
-                          <SortableRow key={ch.id} ch={ch} index={i} />
+                        filtered.map(ch => (
+                          <SortableRow
+                            key={ch.id} ch={ch}
+                            selected={selectedSet.has(ch.id)}
+                            onToggle={() => toggleSelect(ch.id)}
+                            onEdit={() => handleEdit(ch)}
+                            onDelete={() => handleDeleteOne(ch.id)}
+                            editing={editingId === ch.id}
+                            editData={editingId === ch.id ? editData : null}
+                            setEditData={setEditData}
+                            onSaveEdit={handleSaveEdit}
+                            onCancelEdit={handleCancelEdit}
+                          />
                         ))
                       )}
                     </tbody>
