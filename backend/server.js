@@ -220,29 +220,7 @@ app.get('/api/channels', async (req, res) => {
   catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.put('/api/channels/:id', async (req, res) => {
-  try {
-    await ministra.updateChannel(parseInt(req.params.id), req.body);
-    res.json({ ok: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.delete('/api/channels/:id', async (req, res) => {
-  try {
-    await ministra.deleteChannel(parseInt(req.params.id));
-    res.json({ ok: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.post('/api/channels/delete-batch', async (req, res) => {
-  try {
-    const { ids } = req.body;
-    if (!Array.isArray(ids)) return res.status(400).json({ error: 'ids must be an array' });
-    await ministra.deleteChannels(ids);
-    res.json({ ok: true, deleted: ids.length });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
+// IMPORTANT: /reorder must come BEFORE /:id or Express matches "reorder" as an id
 app.put('/api/channels/reorder', async (req, res) => {
   console.log('=== REORDER HIT ===');
   try {
@@ -268,7 +246,6 @@ app.put('/api/channels/reorder', async (req, res) => {
       const rawNum = order[i].number;
       const id = typeof rawId === 'string' ? parseInt(rawId) : rawId;
       const num = typeof rawNum === 'string' ? parseInt(rawNum) : rawNum;
-      console.log(`  [${i}] rawId=${rawId} rawNum=${rawNum} → id=${id} num=${num}`);
       if (id && num >= 0 && !isNaN(id) && !isNaN(num)) {
         await conn.execute('UPDATE itv SET number = ?, modified = NOW() WHERE id = ?', [num, id]);
         count++;
@@ -282,6 +259,29 @@ app.put('/api/channels/reorder', async (req, res) => {
     console.error('=== REORDER ERROR:', err.message, '===');
     res.status(500).json({ error: err.message });
   }
+});
+
+app.post('/api/channels/delete-batch', async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids)) return res.status(400).json({ error: 'ids must be an array' });
+    await ministra.deleteChannels(ids);
+    res.json({ ok: true, deleted: ids.length });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/api/channels/:id', async (req, res) => {
+  try {
+    await ministra.updateChannel(parseInt(req.params.id), req.body);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/channels/:id', async (req, res) => {
+  try {
+    await ministra.deleteChannel(parseInt(req.params.id));
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ─── LOGS ───────────────────────────────────────────────────────────
