@@ -49,17 +49,17 @@
 
     /* Status colors */
     --status-synced: 152 60% 42%;
-    --status-synced-bg: 152 60% 95%;
-    --status-not-synced: 215 15% 55%;
-    --status-not-synced-bg: 215 15% 95%;
+    --status-synced-bg: 152 60% 93%;
+    --status-not-synced: 200 70% 48%;
+    --status-not-synced-bg: 200 70% 94%;
     --status-failed: 0 72% 51%;
-    --status-failed-bg: 0 72% 96%;
+    --status-failed-bg: 0 72% 95%;
     --status-updated: 38 92% 50%;
-    --status-updated-bg: 38 92% 95%;
-    --status-exists: 262 52% 55%;
-    --status-exists-bg: 262 52% 96%;
-    --status-pending: 38 70% 50%;
-    --status-pending-bg: 38 70% 95%;
+    --status-updated-bg: 38 92% 93%;
+    --status-exists: 270 55% 55%;
+    --status-exists-bg: 270 55% 95%;
+    --status-pending: 25 85% 55%;
+    --status-pending-bg: 25 85% 94%;
 
     /* Protocol badges */
     --protocol-mpegts: 215 90% 50%;
