@@ -153,12 +153,37 @@ async function getNextChannelNumber() {
   return rows[0].next_num;
 }
 
+// ── Get GENERAL genre ID ────────────────────────────────────────────
+
+let cachedGenreId = null;
+
+async function getGeneralGenreId() {
+  if (cachedGenreId !== null) return cachedGenreId;
+  const p = getPool();
+  try {
+    // Try to find GENERAL genre
+    const [rows] = await p.query("SELECT id FROM tv_genre WHERE title = 'GENERAL' OR title = 'General' LIMIT 1");
+    if (rows.length > 0) {
+      cachedGenreId = rows[0].id;
+    } else {
+      // Get the first genre as fallback
+      const [all] = await p.query("SELECT id FROM tv_genre ORDER BY id ASC LIMIT 1");
+      cachedGenreId = all.length > 0 ? all[0].id : 1;
+    }
+  } catch {
+    cachedGenreId = 1;
+  }
+  console.log(`[ministra] Using genre ID: ${cachedGenreId}`);
+  return cachedGenreId;
+}
+
 // ── Create / Update channel (schema-safe) ───────────────────────────
 
 async function syncStream(streamKey, title, outputUrl, sortOrder) {
   const p = getPool();
   const cols = await getItvColumns();
   const cmd = outputUrl;
+  const genreId = await getGeneralGenreId();
 
   // Check if channel already exists
   const existing = await findChannelByCmd(streamKey);
@@ -167,8 +192,8 @@ async function syncStream(streamKey, title, outputUrl, sortOrder) {
     if (existing.cmd === cmd && existing.name === title) {
       return { action: 'already_exists', channelId: existing.id, channelName: existing.name };
     }
-    const updateCols = ['name = ?', 'cmd = ?'];
-    const updateVals = [title, cmd];
+    const updateCols = ['name = ?', 'cmd = ?', 'tv_genre_id = ?'];
+    const updateVals = [title, cmd, genreId];
     if (sortOrder) { updateCols.push('number = ?'); updateVals.push(sortOrder); }
     if (cols['modified']) { updateCols.push('modified = NOW()'); }
     updateVals.push(existing.id);
@@ -183,7 +208,7 @@ async function syncStream(streamKey, title, outputUrl, sortOrder) {
   // Values we want to set
   const wanted = {
     name: title, number: num, cmd: cmd, cmd_type: '',
-    status: 1, tv_genre_id: 0, xmltv_id: '', use_http_tmp_link: 0,
+    status: 1, tv_genre_id: genreId, xmltv_id: '', use_http_tmp_link: 0,
     monitoring_url: '', base_ch: 1, modified: now, added: now,
   };
 
