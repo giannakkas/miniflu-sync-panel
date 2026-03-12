@@ -235,17 +235,28 @@ app.post('/api/channels/delete-batch', async (req, res) => {
 app.put('/api/channels/reorder', async (req, res) => {
   try {
     const { order } = req.body;
+    console.log('[reorder] Raw body:', JSON.stringify(req.body).slice(0, 300));
     if (!Array.isArray(order)) return res.status(400).json({ error: 'order must be an array' });
-    // Ensure all values are integers
-    const parsed = order.map(item => ({
-      id: parseInt(item.id, 10),
-      number: parseInt(item.number, 10),
-    })).filter(item => !isNaN(item.id) && !isNaN(item.number));
-    console.log(`[reorder] Received ${order.length} items, valid: ${parsed.length}`);
-    if (parsed.length === 0) return res.status(400).json({ error: 'No valid items to reorder' });
+    const parsed = [];
+    for (const item of order) {
+      const id = Number(item.id);
+      const num = Number(item.number);
+      console.log(`[reorder] item: id=${item.id}(${typeof item.id})→${id}, number=${item.number}(${typeof item.number})→${num}`);
+      if (id > 0 && num >= 0) parsed.push({ id, number: num });
+    }
+    console.log(`[reorder] Valid items: ${parsed.length} of ${order.length}`);
+    if (parsed.length === 0) return res.status(400).json({ error: 'No valid items' });
+    const p = ministra.__getPool ? ministra.__getPool() : null;
+    // Direct MySQL query to bypass any caching
+    for (const item of parsed) {
+      console.log(`[reorder] UPDATE itv SET number=${item.number} WHERE id=${item.id}`);
+    }
     await ministra.reorderChannels(parsed);
-    res.json({ ok: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    res.json({ ok: true, reordered: parsed.length });
+  } catch (err) {
+    console.error('[reorder] Error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ─── LOGS ───────────────────────────────────────────────────────────
