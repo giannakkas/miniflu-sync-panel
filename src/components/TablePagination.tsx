@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -113,5 +114,3 @@ export function usePagination<T>(items: T[], initialPageSize = 10) {
     handlePageSizeChange,
   };
 }
-
-import { useState } from "react";
