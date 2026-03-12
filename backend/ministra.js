@@ -2,17 +2,8 @@
  * Ministra (Stalker Portal) integration.
  *
  * Channel sync requires direct MySQL access to stalker_db.
- * The REST API v1 is read-only and used optionally for verification.
- *
- * Key table: itv
- *   id          – auto-increment
- *   name        – channel display name
- *   number      – channel number / sort order
- *   cmd         – stream command, e.g. "ffmpeg http://host/stream/mpegts"
- *   status      – 1 = active
- *   tv_genre_id – genre/category FK (default 0 or 10)
- *   xmltv_id    – EPG ID (empty string default)
- *   ...
+ * Auto-detects itv table schema on first use to handle different Ministra versions.
+ * Supports bidirectional sync: Flussonic→Ministra and Ministra→Panel status.
  */
 
 const mysql = require('mysql2/promise');
@@ -20,6 +11,7 @@ const { getSetting } = require('./db');
 
 let pool = null;
 let lastConfig = '';
+let itvColumns = null;
 
 function getPoolConfig() {
   return {
@@ -42,7 +34,28 @@ function getPool() {
   if (!cfg.host) throw new Error('Ministra MySQL host not configured');
   pool = mysql.createPool(cfg);
   lastConfig = key;
+  itvColumns = null;
   return pool;
+}
+
+// ── Schema detection ────────────────────────────────────────────────
+
+async function getItvColumns() {
+  if (itvColumns) return itvColumns;
+  const p = getPool();
+  const [rows] = await p.query('SHOW COLUMNS FROM itv');
+  itvColumns = {};
+  for (const r of rows) {
+    itvColumns[r.Field] = {
+      type: r.Type,
+      nullable: r.Null === 'YES',
+      default: r.Default,
+      key: r.Key,
+      extra: r.Extra,
+    };
+  }
+  console.log(`[ministra] Detected ${Object.keys(itvColumns).length} columns in itv table`);
+  return itvColumns;
 }
 
 // ── Test connections ────────────────────────────────────────────────
@@ -51,7 +64,8 @@ async function testDbConnection() {
   try {
     const p = getPool();
     const [rows] = await p.query('SELECT COUNT(*) as cnt FROM itv');
-    return { ok: true, message: `Connected. ${rows[0].cnt} channel(s) in itv table.` };
+    const cols = await getItvColumns();
+    return { ok: true, message: `Connected. ${rows[0].cnt} channel(s), ${Object.keys(cols).length} columns in itv.` };
   } catch (err) {
     return { ok: false, message: err.message };
   }
@@ -73,12 +87,12 @@ async function testApiConnection() {
 }
 
 async function testConnection() {
-  const db = await testDbConnection();
+  const dbResult = await testDbConnection();
   const api = await testApiConnection();
   return {
-    ok: db.ok, // DB is required
-    message: db.ok ? 'Ministra connection OK' : db.message,
-    db,
+    ok: dbResult.ok,
+    message: dbResult.ok ? 'Ministra connection OK' : dbResult.message,
+    db: dbResult,
     api,
   };
 }
@@ -111,34 +125,27 @@ async function getChannels() {
 }
 
 /**
- * Extract the stream key from a Ministra cmd field.
- * E.g. "ffmpeg http://10.0.0.1:80/my_stream/mpegts" → "my_stream"
+ * Extract stream key from Ministra cmd field.
+ * Handles: ffmpeg http://host:port/STREAM/mpegts, http://host/STREAM/index.m3u8, etc.
  */
 function extractStreamKey(cmd) {
   if (!cmd) return '';
-  // Pattern: proto://host:port/STREAM_KEY/format
-  const m = cmd.match(/https?:\/\/[^/]+\/([^/]+)\/(?:mpegts|index\.m3u8|manifest\.mpd)/i);
+  let m = cmd.match(/https?:\/\/[^/]+\/([^/]+)\/(?:mpegts|index\.m3u8|manifest\.mpd|mono\.m3u8)/i);
+  if (m) return m[1];
+  m = cmd.match(/https?:\/\/[^/]+\/([^/\s]+)/i);
   return m ? m[1] : '';
 }
 
-// ── Find channel by stream key ──────────────────────────────────────
+// ── Find channel ────────────────────────────────────────────────────
 
 async function findChannelByCmd(streamKey) {
   const p = getPool();
   const [rows] = await p.query(
-    'SELECT id, name, number, cmd FROM itv WHERE cmd LIKE ?',
-    [`%/${streamKey}/%`]
+    'SELECT id, name, number, cmd FROM itv WHERE cmd LIKE ? OR cmd LIKE ?',
+    [`%/${streamKey}/%`, `%/${streamKey}`]
   );
   return rows.length > 0 ? rows[0] : null;
 }
-
-async function findChannelByName(name) {
-  const p = getPool();
-  const [rows] = await p.query('SELECT id, name, number, cmd FROM itv WHERE name = ?', [name]);
-  return rows.length > 0 ? rows[0] : null;
-}
-
-// ── Get next available channel number ───────────────────────────────
 
 async function getNextChannelNumber() {
   const p = getPool();
@@ -146,52 +153,137 @@ async function getNextChannelNumber() {
   return rows[0].next_num;
 }
 
-// ── Create / Update channel ─────────────────────────────────────────
+// ── Create / Update channel (schema-safe) ───────────────────────────
 
-/**
- * Sync a single stream to Ministra.
- * Returns { action: 'created'|'updated'|'already_exists', channelId, channelName }
- */
 async function syncStream(streamKey, title, outputUrl, sortOrder) {
   const p = getPool();
+  const cols = await getItvColumns();
   const cmd = `ffmpeg ${outputUrl}`;
 
-  // Check if channel already exists by cmd pattern
+  // Check if channel already exists
   const existing = await findChannelByCmd(streamKey);
 
   if (existing) {
-    // Check if anything changed
     if (existing.cmd === cmd && existing.name === title) {
       return { action: 'already_exists', channelId: existing.id, channelName: existing.name };
     }
-    // Update
-    await p.query(
-      'UPDATE itv SET name = ?, cmd = ?, number = ? WHERE id = ?',
-      [title, cmd, sortOrder || existing.number, existing.id]
-    );
+    const updateCols = ['name = ?', 'cmd = ?'];
+    const updateVals = [title, cmd];
+    if (sortOrder) { updateCols.push('number = ?'); updateVals.push(sortOrder); }
+    if (cols['modified']) { updateCols.push('modified = NOW()'); }
+    updateVals.push(existing.id);
+    await p.query(`UPDATE itv SET ${updateCols.join(', ')} WHERE id = ?`, updateVals);
     return { action: 'updated', channelId: existing.id, channelName: title };
   }
 
-  // Create new channel
+  // ── Build INSERT dynamically based on actual schema ──
   const num = sortOrder || await getNextChannelNumber();
-  const [result] = await p.query(
-    `INSERT INTO itv (name, number, cmd, status, tv_genre_id, xmltv_id, use_http_tmp_link, monitoring_url)
-     VALUES (?, ?, ?, 1, 0, '', 0, '')`,
-    [title, num, cmd]
-  );
-  return { action: 'created', channelId: result.insertId, channelName: title };
+  const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
+
+  // Values we want to set
+  const wanted = {
+    name: title, number: num, cmd: cmd, cmd_type: 'ffmpeg',
+    status: 1, tv_genre_id: 0, xmltv_id: '', use_http_tmp_link: 0,
+    monitoring_url: '', base_ch: 1, modified: now, added: now,
+  };
+
+  // Safe defaults for known NOT NULL columns
+  const defaults = {
+    cost: '0', ch_id: '0', service_id: '', bonus_ch: '0',
+    volume_correction: '0', contract: '', mc_cmd: '',
+    enable_tv_archive: 0, wowza_tmp_link: 0, nginx_secure_link: 0,
+    tv_archive_duration: 0, lock: 0, load_balancing: '',
+    cmd_1: '', cmd_2: '', cmd_3: '', logo: '', correct_time: 0,
+    allow_pvr: 0, allow_local_pvr: 0, allow_remote_pvr: 0,
+    censored: 0, descr: '', age: '', genres_id: '', hd: 0,
+    rec: '', default_elect: 0, accessed: 0, tv_archive_type: '',
+    ch_type: '0', flussonic_tmp_link: 0, for_: '',
+  };
+
+  const insertData = {};
+  for (const [colName, colInfo] of Object.entries(cols)) {
+    if (colInfo.extra === 'auto_increment') continue;
+    if (wanted.hasOwnProperty(colName)) {
+      insertData[colName] = wanted[colName];
+    } else if (!colInfo.nullable && colInfo.default === null) {
+      // NOT NULL with no default — must provide value
+      if (defaults.hasOwnProperty(colName)) {
+        insertData[colName] = defaults[colName];
+      } else {
+        const type = colInfo.type.toLowerCase();
+        if (type.includes('int') || type.includes('float') || type.includes('double') || type.includes('decimal') || type.includes('tinyint')) {
+          insertData[colName] = 0;
+        } else if (type.includes('datetime') || type.includes('timestamp')) {
+          insertData[colName] = now;
+        } else {
+          insertData[colName] = '';
+        }
+        console.log(`[ministra] Unknown NOT NULL column "${colName}" (${colInfo.type}) → default: ${JSON.stringify(insertData[colName])}`);
+      }
+    }
+  }
+
+  const columnNames = Object.keys(insertData);
+  const placeholders = columnNames.map(() => '?').join(', ');
+  const values = columnNames.map(k => insertData[k]);
+  const sql = `INSERT INTO itv (${columnNames.join(', ')}) VALUES (${placeholders})`;
+
+  try {
+    const [result] = await p.query(sql, values);
+    return { action: 'created', channelId: result.insertId, channelName: title };
+  } catch (err) {
+    console.error(`[ministra] INSERT failed: ${err.message}`);
+    console.error(`[ministra] Columns: ${columnNames.join(', ')}`);
+    throw err;
+  }
 }
 
-// ── Close pool on shutdown ──────────────────────────────────────────
+// ── Bidirectional sync: Ministra → Panel status ─────────────────────
+
+/**
+ * Read all Ministra channels and update panel stream statuses to match.
+ * Streams in Flussonic that already exist in Ministra get marked 'synced'.
+ */
+async function reconcileWithPanel(localDb) {
+  const p = getPool();
+  const [rows] = await p.query('SELECT id, name, number, cmd, status FROM itv ORDER BY number ASC');
+
+  let matched = 0;
+  let unmatched = 0;
+
+  for (const ch of rows) {
+    const streamKey = extractStreamKey(ch.cmd);
+    if (!streamKey) { unmatched++; continue; }
+
+    const stream = localDb.getStreamByKey(streamKey);
+    if (stream) {
+      localDb.updateStreamSync(
+        streamKey,
+        ch.status === 1 ? 'synced' : 'not_synced',
+        ch.name,
+        ch.id
+      );
+      matched++;
+    } else {
+      unmatched++;
+    }
+  }
+
+  return { matched, unmatched, total: rows.length };
+}
+
+// ── Close ───────────────────────────────────────────────────────────
 
 async function close() {
   if (pool) await pool.end().catch(() => {});
   pool = null;
   lastConfig = '';
+  itvColumns = null;
 }
 
 module.exports = {
   testConnection, testDbConnection, testApiConnection,
-  getChannels, findChannelByCmd, findChannelByName,
-  syncStream, close, extractStreamKey,
+  getChannels, findChannelByCmd,
+  syncStream, reconcileWithPanel, close, extractStreamKey,
+  getItvColumns,
 };

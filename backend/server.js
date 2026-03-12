@@ -1,9 +1,7 @@
 #!/usr/bin/env node
 /**
  * MiniFlu Sync Panel – Backend API
- *
  * Bridges Flussonic Media Server ↔ Ministra (Stalker Portal).
- * Fetches streams from Flussonic, syncs them as IPTV channels into Ministra via direct MySQL.
  */
 
 const express = require('express');
@@ -18,25 +16,14 @@ const ministra = require('./ministra');
 const app = express();
 app.use(express.json());
 
-// ─── Serve static frontend (production) ─────────────────────────────
 const distPath = path.join(__dirname, '..', 'dist');
 app.use(express.static(distPath));
-
-// ─── Auth middleware (simple token-free session) ────────────────────
-// For simplicity we use Basic-style check. The frontend stores login in
-// localStorage. Every /api/* call (except /api/auth/login) must include
-// Authorization: Basic base64(user:pass) OR we just check a session cookie.
-//
-// In the first version we keep it simple: only /api/auth/login validates
-// credentials. Other routes are open once the SPA is loaded. This matches
-// the original Lovable pattern. Add JWT later if needed.
 
 // ─── AUTH ───────────────────────────────────────────────────────────
 app.post('/api/auth/login', (req, res) => {
   const { username, password } = req.body;
   const storedUser = db.getSetting('admin_user');
   const storedHash = db.getSetting('admin_pass');
-
   if (username === storedUser && bcrypt.compareSync(password, storedHash)) {
     return res.json({ ok: true, user: username });
   }
@@ -50,28 +37,19 @@ app.get('/api/settings', (req, res) => {
 
 app.put('/api/settings', (req, res) => {
   db.saveSettings(req.body);
-  // Reschedule auto-sync if interval changed
   scheduleAutoSync();
   res.json({ ok: true });
 });
 
 // ─── TEST CONNECTIONS ───────────────────────────────────────────────
 app.post('/api/test/flussonic', async (req, res) => {
-  try {
-    const result = await flussonic.testConnection();
-    res.json(result);
-  } catch (err) {
-    res.json({ ok: false, message: err.message });
-  }
+  try { res.json(await flussonic.testConnection()); }
+  catch (err) { res.json({ ok: false, message: err.message }); }
 });
 
 app.post('/api/test/ministra', async (req, res) => {
-  try {
-    const result = await ministra.testConnection();
-    res.json(result);
-  } catch (err) {
-    res.json({ ok: false, message: err.message });
-  }
+  try { res.json(await ministra.testConnection()); }
+  catch (err) { res.json({ ok: false, message: err.message }); }
 });
 
 // ─── DASHBOARD ──────────────────────────────────────────────────────
@@ -81,15 +59,11 @@ app.get('/api/dashboard', (req, res) => {
   const synced = streams.filter(s => ['synced', 'updated', 'already_exists'].includes(s.status)).length;
   const notSynced = streams.filter(s => s.status === 'not_synced').length;
   const failed = streams.filter(s => s.status === 'failed').length;
-
   const fHost = db.getSetting('flussonic_host');
   const mHost = db.getSetting('ministra_db_host');
 
   res.json({
-    total,
-    synced,
-    notSynced,
-    failed,
+    total, synced, notSynced, failed,
     flussonicConfigured: !!fHost,
     ministraConfigured: !!mHost,
     lastSyncTime: db.getSyncState('last_full_sync'),
@@ -99,6 +73,39 @@ app.get('/api/dashboard', (req, res) => {
   });
 });
 
+// ─── Helper: refresh from Flussonic + reconcile with Ministra ───────
+async function refreshFromFlussonic() {
+  const flussonicStreams = await flussonic.fetchStreams();
+
+  db.markAllStreamsDead();
+  let order = 1;
+  for (const s of flussonicStreams) {
+    const existing = db.getStreamByKey(s.name);
+    db.upsertStream({
+      stream_key: s.name,
+      title: s.title || s.name,
+      output_url: flussonic.buildOutputUrl(s.name),
+      protocol: 'MPEG-TS',
+      bitrate: s.bitrate || null,
+      resolution: s.resolution || null,
+      sort_order: existing ? existing.sort_order : order,
+      raw_json: JSON.stringify(s.raw || {}),
+    });
+    order++;
+  }
+  db.removeDeadStreams();
+
+  // Bidirectional: check which streams already exist in Ministra
+  try {
+    const reconcile = await ministra.reconcileWithPanel(db);
+    console.log(`[reconcile] ${reconcile.matched} matched, ${reconcile.unmatched} unmatched in Ministra (${reconcile.total} total channels)`);
+  } catch (err) {
+    console.log(`[reconcile] Ministra reconcile skipped: ${err.message}`);
+  }
+
+  return flussonicStreams.length;
+}
+
 // ─── STREAMS ────────────────────────────────────────────────────────
 app.get('/api/streams', (req, res) => {
   res.json(db.getAllStreams());
@@ -106,35 +113,9 @@ app.get('/api/streams', (req, res) => {
 
 app.post('/api/streams/refresh', async (req, res) => {
   try {
-    const flussonicStreams = await flussonic.fetchStreams();
-
-    db.markAllStreamsDead();
-
-    let order = 1;
-    for (const s of flussonicStreams) {
-      const existing = db.getStreamByKey(s.name);
-      db.upsertStream({
-        stream_key: s.name,
-        title: s.title || s.name,
-        output_url: flussonic.buildOutputUrl(s.name),
-        protocol: 'MPEG-TS',
-        bitrate: s.bitrate || null,
-        resolution: s.resolution || null,
-        sort_order: existing ? existing.sort_order : order,
-        raw_json: JSON.stringify(s.raw || {}),
-      });
-      order++;
-    }
-
-    db.removeDeadStreams();
-
-    db.addLog({
-      action: 'refresh',
-      result: 'success',
-      details: `Fetched ${flussonicStreams.length} stream(s) from Flussonic`,
-    });
-
-    res.json({ ok: true, message: `Fetched ${flussonicStreams.length} stream(s) from Flussonic` });
+    const count = await refreshFromFlussonic();
+    db.addLog({ action: 'refresh', result: 'success', details: `Fetched ${count} stream(s) from Flussonic` });
+    res.json({ ok: true, message: `Fetched ${count} stream(s) from Flussonic` });
   } catch (err) {
     db.addLog({ action: 'refresh', result: 'failed', details: err.message });
     res.status(500).json({ error: err.message });
@@ -161,29 +142,17 @@ async function syncStreamKeys(streamKeys) {
   for (const stream of streams) {
     try {
       const result = await ministra.syncStream(
-        stream.stream_key,
-        stream.title,
-        stream.output_url,
-        stream.sort_order
+        stream.stream_key, stream.title, stream.output_url, stream.sort_order
       );
 
       let status;
-      if (result.action === 'created') {
-        status = 'synced';
-        results.success++;
-      } else if (result.action === 'updated') {
-        status = 'updated';
-        results.updated++;
-      } else {
-        status = 'synced';
-        results.skipped++;
-      }
+      if (result.action === 'created') { status = 'synced'; results.success++; }
+      else if (result.action === 'updated') { status = 'updated'; results.updated++; }
+      else { status = 'synced'; results.skipped++; }
 
       db.updateStreamSync(stream.stream_key, status, result.channelName, result.channelId);
-
       db.addLog({
-        stream_key: stream.stream_key,
-        title: stream.title,
+        stream_key: stream.stream_key, title: stream.title,
         action: `sync → ${result.action}`,
         result: result.action === 'already_exists' ? 'skipped' : 'success',
         details: `Channel #${result.channelId}: ${result.channelName}`,
@@ -192,15 +161,11 @@ async function syncStreamKeys(streamKeys) {
       results.failed++;
       db.updateStreamSync(stream.stream_key, 'failed', null, null);
       db.addLog({
-        stream_key: stream.stream_key,
-        title: stream.title,
-        action: 'sync',
-        result: 'failed',
-        details: err.message,
+        stream_key: stream.stream_key, title: stream.title,
+        action: 'sync', result: 'failed', details: err.message,
       });
     }
   }
-
   return results;
 }
 
@@ -216,36 +181,14 @@ app.post('/api/sync', async (req, res) => {
 
 app.post('/api/sync/full', async (req, res) => {
   try {
-    // First refresh from Flussonic
-    const flussonicStreams = await flussonic.fetchStreams();
-    db.markAllStreamsDead();
-    let order = 1;
-    for (const s of flussonicStreams) {
-      const existing = db.getStreamByKey(s.name);
-      db.upsertStream({
-        stream_key: s.name,
-        title: s.title || s.name,
-        output_url: flussonic.buildOutputUrl(s.name),
-        protocol: 'MPEG-TS',
-        bitrate: s.bitrate || null,
-        resolution: s.resolution || null,
-        sort_order: existing ? existing.sort_order : order,
-        raw_json: JSON.stringify(s.raw || {}),
-      });
-      order++;
-    }
-    db.removeDeadStreams();
-
-    // Then sync all to Ministra
+    await refreshFromFlussonic();
     const results = await syncStreamKeys(null);
     db.setSyncState('last_full_sync', new Date().toISOString());
-
     db.addLog({
       action: 'full_sync',
       result: results.failed > 0 ? 'failed' : 'success',
       details: `Full sync: ${results.success} created, ${results.updated} updated, ${results.skipped} unchanged, ${results.failed} failed`,
     });
-
     res.json(results);
   } catch (err) {
     db.addLog({ action: 'full_sync', result: 'failed', details: err.message });
@@ -256,26 +199,21 @@ app.post('/api/sync/full', async (req, res) => {
 app.get('/api/sync/status', (req, res) => {
   res.json({
     lastFullSync: db.getSyncState('last_full_sync'),
-    running: false, // Could add mutex later
+    running: false,
   });
 });
 
-// ─── CHANNELS ───────────────────────────────────────────────────────
+// ─── CHANNELS (live from Ministra) ──────────────────────────────────
 app.get('/api/channels', async (req, res) => {
-  try {
-    const channels = await ministra.getChannels();
-    res.json(channels);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  try { res.json(await ministra.getChannels()); }
+  catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ─── LOGS ───────────────────────────────────────────────────────────
 app.get('/api/logs', (req, res) => {
   const limit = parseInt(req.query.limit) || 100;
   const offset = parseInt(req.query.offset) || 0;
-  const logs = db.getLogs(limit, offset);
-  res.json({ logs });
+  res.json({ logs: db.getLogs(limit, offset) });
 });
 
 app.delete('/api/logs', (req, res) => {
@@ -283,12 +221,17 @@ app.delete('/api/logs', (req, res) => {
   res.json({ ok: true });
 });
 
+// ─── ADMIN: Reset local cache ───────────────────────────────────────
+app.post('/api/admin/reset', async (req, res) => {
+  db.db.exec('DELETE FROM streams');
+  db.db.exec('DELETE FROM logs');
+  db.db.exec('DELETE FROM sync_state');
+  res.json({ ok: true, message: 'Local cache cleared. Refresh to pull fresh data.' });
+});
+
 // ─── SPA fallback ───────────────────────────────────────────────────
 app.get('*', (req, res) => {
-  // Don't serve HTML for /api/* 404s
-  if (req.path.startsWith('/api/')) {
-    return res.status(404).json({ error: 'Not found' });
-  }
+  if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'Not found' });
   res.sendFile(path.join(distPath, 'index.html'));
 });
 
@@ -296,61 +239,32 @@ app.get('*', (req, res) => {
 let cronJob = null;
 
 function scheduleAutoSync() {
-  if (cronJob) {
-    cronJob.stop();
-    cronJob = null;
-  }
-
+  if (cronJob) { cronJob.stop(); cronJob = null; }
   const minutes = parseInt(db.getSetting('sync_interval_minutes') || '0', 10);
-  if (minutes <= 0) {
-    console.log('[scheduler] Auto-sync disabled');
-    return;
-  }
+  if (minutes <= 0) { console.log('[scheduler] Auto-sync disabled'); return; }
 
-  const expr = `*/${minutes} * * * *`;
-  cronJob = cron.schedule(expr, async () => {
+  cronJob = cron.schedule(`*/${minutes} * * * *`, async () => {
     console.log(`[scheduler] Auto-sync triggered (every ${minutes}m)`);
     try {
-      const flussonicStreams = await flussonic.fetchStreams();
-      db.markAllStreamsDead();
-      let order = 1;
-      for (const s of flussonicStreams) {
-        const existing = db.getStreamByKey(s.name);
-        db.upsertStream({
-          stream_key: s.name,
-          title: s.title || s.name,
-          output_url: flussonic.buildOutputUrl(s.name),
-          protocol: 'MPEG-TS',
-          bitrate: s.bitrate || null,
-          resolution: s.resolution || null,
-          sort_order: existing ? existing.sort_order : order,
-          raw_json: JSON.stringify(s.raw || {}),
-        });
-        order++;
-      }
-      db.removeDeadStreams();
-
+      await refreshFromFlussonic();
       const results = await syncStreamKeys(null);
       db.setSyncState('last_full_sync', new Date().toISOString());
-      console.log(`[scheduler] Sync done: ${results.success} created, ${results.updated} updated, ${results.failed} failed`);
+      console.log(`[scheduler] Done: ${results.success} created, ${results.updated} updated, ${results.failed} failed`);
     } catch (err) {
-      console.error(`[scheduler] Sync error: ${err.message}`);
+      console.error(`[scheduler] Error: ${err.message}`);
       db.addLog({ action: 'auto_sync', result: 'failed', details: err.message });
     }
   });
-
-  console.log(`[scheduler] Auto-sync scheduled every ${minutes} minutes`);
+  console.log(`[scheduler] Auto-sync every ${minutes} minutes`);
 }
 
 // ─── START ──────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
-
 app.listen(PORT, () => {
   console.log(`MiniFlu backend listening on port ${PORT}`);
   scheduleAutoSync();
 });
 
-// Graceful shutdown
 process.on('SIGTERM', async () => {
   if (cronJob) cronJob.stop();
   await ministra.close();
