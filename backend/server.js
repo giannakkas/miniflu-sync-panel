@@ -294,6 +294,28 @@ app.delete('/api/channels/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ─── M3U EXPORT ─────────────────────────────────────────────────────
+app.get('/api/channels/export.m3u', async (req, res) => {
+  try {
+    const channels = await ministra.getChannels();
+    let m3u = '#EXTM3U\n';
+    for (const ch of channels) {
+      const name = ch.name || '';
+      const tvgName = name.replace(/[^a-zA-Z0-9 ]/g, '').trim();
+      const tvgId = tvgName.toLowerCase().replace(/\s+/g, '') + '.tv';
+      const logo = 'https://logo.m3uassets.com/' + tvgName.toLowerCase().replace(/\s+/g, '') + '.png';
+      const url = ch.cmd || '';
+      m3u += `#EXTINF:0 CUID="${ch.number}" tvg-name="${name}" tvg-id="${tvgId}" tvg-logo="${logo}" group-title="",${name}\n`;
+      m3u += `${url}\n`;
+    }
+    res.setHeader('Content-Type', 'application/x-mpegurl');
+    res.setHeader('Content-Disposition', 'attachment; filename="channels.m3u"');
+    res.send(m3u);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── LOGS ───────────────────────────────────────────────────────────
 app.get('/api/logs', (req, res) => {
   const limit = parseInt(req.query.limit) || 100;

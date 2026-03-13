@@ -15,7 +15,7 @@ import {
   arrayMove, SortableContext, useSortable, verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Search, MonitorPlay, Loader2, GripVertical, RefreshCw, Trash2, Pencil, X, Check } from "lucide-react";
+import { Search, MonitorPlay, Loader2, GripVertical, RefreshCw, Trash2, Pencil, X, Check, Download } from "lucide-react";
 
 interface Channel {
   id: number;
@@ -205,10 +205,20 @@ const ChannelsPage = () => {
               {channels.length} channel{channels.length !== 1 ? "s" : ""} in Ministra — drag to reorder
             </p>
           </div>
-          <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing}>
-            <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
+          <div className="flex gap-2">
+            {isAdmin && (
+              <Button variant="outline" size="sm" asChild>
+                <a href="/api/channels/export.m3u" download="channels.m3u">
+                  <Download className="w-4 h-4 mr-2" />
+                  Export M3U
+                </a>
+              </Button>
+            )}
+            <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing}>
+              <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+          </div>
         </div>
 
         <Card className="p-4 mb-4 bg-card border border-border">
