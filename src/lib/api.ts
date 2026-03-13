@@ -59,4 +59,11 @@ export const api = {
   getLogs: (limit = 100, offset = 0) =>
     request('GET', `/logs?limit=${limit}&offset=${offset}`),
   clearLogs: () => request('DELETE', '/logs'),
+
+  // EPG
+  matchEpg: (m3u_text: string) =>
+    request('POST', '/epg/match', { m3u_text }),
+  applyEpg: (mappings: { id: number; xmltv_id: string; logo?: string }[]) =>
+    request('POST', '/epg/apply', { mappings }),
+  getEpgStatus: () => request('GET', '/epg/status'),
 };

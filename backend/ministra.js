@@ -112,7 +112,7 @@ function buildApiHeaders() {
 async function getChannels() {
   const p = getPool();
   const [rows] = await p.query(
-    `SELECT i.id, i.name, i.number, COALESCE(cl.url, i.cmd) as cmd, i.status, i.tv_genre_id
+    `SELECT i.id, i.name, i.number, COALESCE(cl.url, i.cmd) as cmd, i.status, i.tv_genre_id, i.xmltv_id, i.logo
      FROM itv i LEFT JOIN ch_links cl ON cl.ch_id = i.id
      GROUP BY i.id
      ORDER BY i.number ASC`
@@ -124,6 +124,9 @@ async function getChannels() {
     cmd: r.cmd || '',
     sourceStream: extractStreamKey(r.cmd),
     status: r.status === 1 ? 'synced' : 'not_synced',
+    xmltv_id: r.xmltv_id || '',
+    logo: r.logo || '',
+    hasEpg: !!(r.xmltv_id && r.xmltv_id.trim()),
   }));
 }
 
@@ -382,6 +385,39 @@ async function reorderChannels(order) {
   console.log(`[ministra] Reordered ${order.length} channels`);
 }
 
+// ── EPG functions ───────────────────────────────────────────────────
+
+async function applyEpgIds(mappings) {
+  const p = getPool();
+  for (const m of mappings) {
+    const id = Number(m.id);
+    if (!id || isNaN(id)) continue;
+    const sets = ['xmltv_id = ?'];
+    const vals = [m.xmltv_id || ''];
+    if (m.logo) {
+      sets.push('logo = ?');
+      vals.push(m.logo);
+    }
+    sets.push('modified = NOW()');
+    vals.push(id);
+    await p.query(`UPDATE itv SET ${sets.join(', ')} WHERE id = ?`, vals);
+  }
+  console.log(`[ministra] Applied EPG IDs to ${mappings.length} channels`);
+}
+
+async function getEpgStatus() {
+  const p = getPool();
+  const [rows] = await p.query(
+    "SELECT id, name, xmltv_id FROM itv ORDER BY number ASC"
+  );
+  return rows.map(r => ({
+    id: r.id,
+    name: r.name,
+    xmltv_id: r.xmltv_id || '',
+    hasEpg: !!(r.xmltv_id && r.xmltv_id.trim()),
+  }));
+}
+
 // ── Close ───────────────────────────────────────────────────────────
 
 async function close() {
@@ -396,4 +432,5 @@ module.exports = {
   getChannels, findChannelByCmd,
   syncStream, reconcileWithPanel, close, extractStreamKey,
   getItvColumns, deleteChannel, deleteChannels, updateChannel, reorderChannels,
+  applyEpgIds, getEpgStatus,
 };

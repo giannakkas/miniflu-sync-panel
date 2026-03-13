@@ -24,6 +24,8 @@ interface Channel {
   cmd: string;
   sourceStream: string;
   status: string;
+  hasEpg?: boolean;
+  xmltv_id?: string;
 }
 
 function SortableRow({ ch, selected, onToggle, onEdit, onDelete, editing, editData, setEditData, onSaveEdit, onCancelEdit, isAdmin }: {
@@ -47,6 +49,9 @@ function SortableRow({ ch, selected, onToggle, onEdit, onDelete, editing, editDa
       </td>
       <td className="p-3 w-10">{isAdmin && <Checkbox checked={selected} onCheckedChange={onToggle} />}</td>
       <td className="p-3 text-center text-xs font-mono text-muted-foreground font-semibold w-14">{ch.number}</td>
+      <td className="p-3 text-center w-14">
+        <span className={`inline-block w-2.5 h-2.5 rounded-full ${ch.hasEpg ? 'bg-green-500' : 'bg-red-400'}`} title={ch.hasEpg ? `EPG: ${ch.xmltv_id}` : 'No EPG'} />
+      </td>
       <td className="p-3 font-medium text-foreground">
         {editing && editData ? (
           <Input value={editData.name} onChange={e => setEditData({ ...editData, name: e.target.value })} className="h-8 text-sm" />
@@ -261,6 +266,7 @@ const ChannelsPage = () => {
                         {isAdmin && <Checkbox checked={filtered.length > 0 && filtered.every(ch => selectedSet.has(ch.id))} onCheckedChange={(c) => c ? selectAll() : deselectAll()} />}
                       </th>
                       <th className="text-center p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider w-14">#</th>
+                      <th className="text-center p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider w-14">EPG</th>
                       <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Channel Name</th>
                       <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Source Stream</th>
                       <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden lg:table-cell">CMD / URL</th>
@@ -271,7 +277,7 @@ const ChannelsPage = () => {
                     <tbody>
                       {filtered.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className="text-center py-12 text-muted-foreground">
+                          <td colSpan={8} className="text-center py-12 text-muted-foreground">
                             <MonitorPlay className="w-8 h-8 mx-auto mb-2 opacity-40" />
                             <p>No channels found</p>
                           </td>

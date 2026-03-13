@@ -9,6 +9,7 @@ import {
   Settings,
   LogOut,
   ChevronLeft,
+  Tv,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -18,6 +19,7 @@ const allNavItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard, adminOnly: true },
   { title: "Streams", url: "/streams", icon: List, adminOnly: true },
   { title: "Synced Channels", url: "/channels", icon: MonitorPlay, adminOnly: false },
+  { title: "EPG", url: "/epg", icon: Tv, adminOnly: true },
   { title: "Logs", url: "/logs", icon: ScrollText, adminOnly: true },
   { title: "Settings", url: "/settings", icon: Settings, adminOnly: true },
 ];

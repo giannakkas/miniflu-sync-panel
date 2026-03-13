@@ -302,7 +302,7 @@ app.get('/api/channels/export.m3u', async (req, res) => {
     for (const ch of channels) {
       const name = ch.name || '';
       const tvgName = name.replace(/[^a-zA-Z0-9 ]/g, '').trim();
-      const tvgId = tvgName.toLowerCase().replace(/\s+/g, '') + '.tv';
+      const tvgId = ch.xmltv_id || (tvgName.toLowerCase().replace(/\s+/g, '') + '.tv');
       const logo = 'https://logo.m3uassets.com/' + tvgName.toLowerCase().replace(/\s+/g, '') + '.png';
       const url = ch.cmd || '';
       m3u += `#EXTINF:0 CUID="${ch.number}" tvg-name="${name}" tvg-id="${tvgId}" tvg-logo="${logo}" group-title="",${name}\n`;
@@ -311,6 +311,94 @@ app.get('/api/channels/export.m3u', async (req, res) => {
     res.setHeader('Content-Type', 'application/x-mpegurl');
     res.setHeader('Content-Disposition', 'attachment; filename="channels.m3u"');
     res.send(m3u);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── EPG ────────────────────────────────────────────────────────────
+
+// Parse M3U text and return channel→tvg-id mappings
+function parseM3UForEpg(m3uText) {
+  const lines = m3uText.split('\n');
+  const mappings = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line.startsWith('#EXTINF:')) continue;
+    const tvgIdMatch = line.match(/tvg-id="([^"]*)"/);
+    const tvgLogoMatch = line.match(/tvg-logo="([^"]*)"/);
+    const nameMatch = line.match(/,([^$]+)$/);
+    const urlLine = (lines[i + 1] || '').trim();
+    if (nameMatch) {
+      mappings.push({
+        name: nameMatch[1].trim(),
+        tvg_id: tvgIdMatch ? tvgIdMatch[1] : '',
+        tvg_logo: tvgLogoMatch ? tvgLogoMatch[1] : '',
+        url: urlLine.startsWith('http') ? urlLine : '',
+      });
+    }
+  }
+  return mappings;
+}
+
+// Match M3U entries to Ministra channels by name or URL
+app.post('/api/epg/match', async (req, res) => {
+  try {
+    const { m3u_text } = req.body;
+    if (!m3u_text) return res.status(400).json({ error: 'No M3U data provided' });
+
+    const mappings = parseM3UForEpg(m3u_text);
+    const channels = await ministra.getChannels();
+
+    const results = channels.map(ch => {
+      // Try to find matching M3U entry by name (fuzzy) or URL
+      const chNameLower = (ch.name || '').toLowerCase().trim();
+      const chUrl = (ch.cmd || '').trim();
+
+      let match = mappings.find(m => m.url && chUrl && m.url === chUrl);
+      if (!match) match = mappings.find(m => m.name.toLowerCase().trim() === chNameLower);
+      if (!match) {
+        // Fuzzy: strip special chars and compare
+        const chClean = chNameLower.replace(/[^a-z0-9]/g, '');
+        match = mappings.find(m => m.name.toLowerCase().replace(/[^a-z0-9]/g, '') === chClean);
+      }
+
+      return {
+        id: ch.id,
+        name: ch.name,
+        number: ch.number,
+        cmd: ch.cmd,
+        current_xmltv_id: ch.xmltv_id || '',
+        matched_tvg_id: match ? match.tvg_id : '',
+        matched_tvg_logo: match ? match.tvg_logo : '',
+        matched: !!match,
+      };
+    });
+
+    res.json(results);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Apply EPG IDs to Ministra channels
+app.post('/api/epg/apply', async (req, res) => {
+  try {
+    const { mappings } = req.body; // [{ id: number, xmltv_id: string, logo: string }]
+    if (!Array.isArray(mappings)) return res.status(400).json({ error: 'mappings must be an array' });
+
+    await ministra.applyEpgIds(mappings);
+    res.json({ ok: true, applied: mappings.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get EPG status for all channels
+app.get('/api/epg/status', async (req, res) => {
+  try {
+    const status = await ministra.getEpgStatus();
+    res.json(status);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

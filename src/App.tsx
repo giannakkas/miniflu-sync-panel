@@ -9,6 +9,7 @@ import DashboardPage from "./pages/DashboardPage";
 import StreamsPage from "./pages/StreamsPage";
 import ChannelsPage from "./pages/ChannelsPage";
 import LogsPage from "./pages/LogsPage";
+import EpgPage from "./pages/EpgPage";
 import SettingsPage from "./pages/SettingsPage";
 import NotFound from "./pages/NotFound";
 
@@ -38,6 +39,7 @@ const AppRoutes = () => (
     <Route path="/" element={<AdminRoute><DashboardPage /></AdminRoute>} />
     <Route path="/streams" element={<AdminRoute><StreamsPage /></AdminRoute>} />
     <Route path="/channels" element={<ProtectedRoute><ChannelsPage /></ProtectedRoute>} />
+    <Route path="/epg" element={<AdminRoute><EpgPage /></AdminRoute>} />
     <Route path="/logs" element={<AdminRoute><LogsPage /></AdminRoute>} />
     <Route path="/settings" element={<AdminRoute><SettingsPage /></AdminRoute>} />
     <Route path="*" element={<NotFound />} />
