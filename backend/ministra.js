@@ -242,7 +242,7 @@ async function syncStream(streamKey, title, outputUrl, sortOrder) {
   const wanted = {
     name: title, number: num, cmd: cmd,
     status: 1, tv_genre_id: genreId, xmltv_id: '', use_http_tmp_link: 0,
-    monitoring_url: '', base_ch: 1, modified: now, added: now,
+    monitoring_url: '', base_ch: 0, modified: now, added: now,
   };
 
   // Safe defaults for known NOT NULL columns
