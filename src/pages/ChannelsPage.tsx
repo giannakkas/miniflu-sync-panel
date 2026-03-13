@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -25,12 +26,13 @@ interface Channel {
   status: string;
 }
 
-function SortableRow({ ch, selected, onToggle, onEdit, onDelete, editing, editData, setEditData, onSaveEdit, onCancelEdit }: {
+function SortableRow({ ch, selected, onToggle, onEdit, onDelete, editing, editData, setEditData, onSaveEdit, onCancelEdit, isAdmin }: {
   ch: Channel; selected: boolean; onToggle: () => void;
   onEdit: () => void; onDelete: () => void;
   editing: boolean; editData: { name: string; cmd: string } | null;
   setEditData: (d: { name: string; cmd: string }) => void;
   onSaveEdit: () => void; onCancelEdit: () => void;
+  isAdmin: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: ch.id });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1, position: "relative" as const, zIndex: isDragging ? 10 : undefined };
@@ -43,7 +45,7 @@ function SortableRow({ ch, selected, onToggle, onEdit, onDelete, editing, editDa
           <GripVertical className="w-4 h-4" />
         </button>
       </td>
-      <td className="p-3 w-10"><Checkbox checked={selected} onCheckedChange={onToggle} /></td>
+      <td className="p-3 w-10">{isAdmin && <Checkbox checked={selected} onCheckedChange={onToggle} />}</td>
       <td className="p-3 text-center text-xs font-mono text-muted-foreground font-semibold w-14">{ch.number}</td>
       <td className="p-3 font-medium text-foreground">
         {editing && editData ? (
@@ -59,6 +61,7 @@ function SortableRow({ ch, selected, onToggle, onEdit, onDelete, editing, editDa
         )}
       </td>
       <td className="p-3">
+        {isAdmin ? (
         <div className="flex items-center gap-1">
           {editing ? (
             <>
@@ -72,12 +75,14 @@ function SortableRow({ ch, selected, onToggle, onEdit, onDelete, editing, editDa
             </>
           )}
         </div>
+        ) : null}
       </td>
     </tr>
   );
 }
 
 const ChannelsPage = () => {
+  const { isAdmin } = useAuth();
   const [search, setSearch] = useState("");
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(true);
@@ -213,9 +218,9 @@ const ChannelsPage = () => {
               <Input placeholder="Search channels..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9" />
             </div>
             <div className="flex flex-wrap gap-2 items-center">
-              <Button variant="outline" size="sm" onClick={selectAll}>Select All</Button>
-              <Button variant="outline" size="sm" onClick={deselectAll}>Deselect All</Button>
-              {selectedSet.size > 0 && (
+              {isAdmin && <Button variant="outline" size="sm" onClick={selectAll}>Select All</Button>}
+              {isAdmin && <Button variant="outline" size="sm" onClick={deselectAll}>Deselect All</Button>}
+              {isAdmin && selectedSet.size > 0 && (
                 <Button variant="destructive" size="sm" onClick={handleDeleteSelected} disabled={deleting}>
                   <Trash2 className="w-4 h-4 mr-2" />
                   {deleting ? "Deleting..." : `Delete Selected (${selectedSet.size})`}
@@ -243,7 +248,7 @@ const ChannelsPage = () => {
                     <tr className="border-b border-border bg-muted/50">
                       <th className="text-left p-3 w-10"></th>
                       <th className="text-left p-3 w-10">
-                        <Checkbox checked={filtered.length > 0 && filtered.every(ch => selectedSet.has(ch.id))} onCheckedChange={(c) => c ? selectAll() : deselectAll()} />
+                        {isAdmin && <Checkbox checked={filtered.length > 0 && filtered.every(ch => selectedSet.has(ch.id))} onCheckedChange={(c) => c ? selectAll() : deselectAll()} />}
                       </th>
                       <th className="text-center p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider w-14">#</th>
                       <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Channel Name</th>
@@ -274,6 +279,7 @@ const ChannelsPage = () => {
                             setEditData={setEditData}
                             onSaveEdit={handleSaveEdit}
                             onCancelEdit={handleCancelEdit}
+                            isAdmin={isAdmin}
                           />
                         ))
                       )}

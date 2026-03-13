@@ -4,6 +4,8 @@ import { api } from "@/lib/api";
 interface AuthContextType {
   isAuthenticated: boolean;
   username: string;
+  role: string;
+  isAdmin: boolean;
   login: (username: string, password: string) => Promise<boolean>;
   logout: () => void;
 }
@@ -19,6 +21,9 @@ export const useAuth = () => {
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(() => localStorage.getItem("miniflu_auth") === "true");
   const [username, setUsername] = useState(() => localStorage.getItem("miniflu_user") || "");
+  const [role, setRole] = useState(() => localStorage.getItem("miniflu_role") || "admin");
+
+  const isAdmin = role === "admin";
 
   const login = useCallback(async (user: string, pass: string) => {
     try {
@@ -26,8 +31,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (result.ok) {
         setIsAuthenticated(true);
         setUsername(user);
+        setRole(result.role || "admin");
         localStorage.setItem("miniflu_auth", "true");
         localStorage.setItem("miniflu_user", user);
+        localStorage.setItem("miniflu_role", result.role || "admin");
         return true;
       }
     } catch {}
@@ -37,12 +44,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = useCallback(() => {
     setIsAuthenticated(false);
     setUsername("");
+    setRole("admin");
     localStorage.removeItem("miniflu_auth");
     localStorage.removeItem("miniflu_user");
+    localStorage.removeItem("miniflu_role");
   }, []);
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, username, login, logout }}>
+    <AuthContext.Provider value={{ isAuthenticated, username, role, isAdmin, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

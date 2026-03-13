@@ -33,11 +33,21 @@ app.use(express.static(distPath));
 // ─── AUTH ───────────────────────────────────────────────────────────
 app.post('/api/auth/login', (req, res) => {
   const { username, password } = req.body;
-  const storedUser = db.getSetting('admin_user');
-  const storedHash = db.getSetting('admin_pass');
-  if (username === storedUser && bcrypt.compareSync(password, storedHash)) {
-    return res.json({ ok: true, user: username });
+  
+  // Check admin
+  const adminUser = db.getSetting('admin_user');
+  const adminHash = db.getSetting('admin_pass');
+  if (username === adminUser && bcrypt.compareSync(password, adminHash)) {
+    return res.json({ ok: true, user: username, role: 'admin' });
   }
+  
+  // Check operator
+  const opUser = db.getSetting('operator_user');
+  const opHash = db.getSetting('operator_pass');
+  if (username === opUser && bcrypt.compareSync(password, opHash)) {
+    return res.json({ ok: true, user: username, role: 'operator' });
+  }
+  
   res.status(401).json({ error: 'Invalid credentials' });
 });
 

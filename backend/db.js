@@ -56,6 +56,8 @@ db.exec(`
 const defaults = {
   admin_user: 'admin',
   admin_pass: bcrypt.hashSync('admin', 10),
+  operator_user: 'user',
+  operator_pass: bcrypt.hashSync('user', 10),
   flussonic_host: '172.18.181.12',
   flussonic_port: '8080',
   flussonic_user: 'admin',

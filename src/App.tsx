@@ -19,19 +19,27 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
 }
 
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isAdmin } = useAuth();
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (!isAdmin) return <Navigate to="/channels" replace />;
+  return <>{children}</>;
+}
+
 function AuthRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuth();
-  return isAuthenticated ? <Navigate to="/" replace /> : <>{children}</>;
+  const { isAuthenticated, isAdmin } = useAuth();
+  if (!isAuthenticated) return <>{children}</>;
+  return <Navigate to={isAdmin ? "/" : "/channels"} replace />;
 }
 
 const AppRoutes = () => (
   <Routes>
     <Route path="/login" element={<AuthRoute><LoginPage /></AuthRoute>} />
-    <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
-    <Route path="/streams" element={<ProtectedRoute><StreamsPage /></ProtectedRoute>} />
+    <Route path="/" element={<AdminRoute><DashboardPage /></AdminRoute>} />
+    <Route path="/streams" element={<AdminRoute><StreamsPage /></AdminRoute>} />
     <Route path="/channels" element={<ProtectedRoute><ChannelsPage /></ProtectedRoute>} />
-    <Route path="/logs" element={<ProtectedRoute><LogsPage /></ProtectedRoute>} />
-    <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+    <Route path="/logs" element={<AdminRoute><LogsPage /></AdminRoute>} />
+    <Route path="/settings" element={<AdminRoute><SettingsPage /></AdminRoute>} />
     <Route path="*" element={<NotFound />} />
   </Routes>
 );

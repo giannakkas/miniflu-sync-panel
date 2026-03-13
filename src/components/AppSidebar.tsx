@@ -2,7 +2,6 @@ import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "react-router-dom";
 import {
-  Radio,
   LayoutDashboard,
   List,
   MonitorPlay,
@@ -15,18 +14,20 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
-const navItems = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "Streams", url: "/streams", icon: List },
-  { title: "Synced Channels", url: "/channels", icon: MonitorPlay },
-  { title: "Logs", url: "/logs", icon: ScrollText },
-  { title: "Settings", url: "/settings", icon: Settings },
+const allNavItems = [
+  { title: "Dashboard", url: "/", icon: LayoutDashboard, adminOnly: true },
+  { title: "Streams", url: "/streams", icon: List, adminOnly: true },
+  { title: "Synced Channels", url: "/channels", icon: MonitorPlay, adminOnly: false },
+  { title: "Logs", url: "/logs", icon: ScrollText, adminOnly: true },
+  { title: "Settings", url: "/settings", icon: Settings, adminOnly: true },
 ];
 
 export function AppSidebar() {
-  const { logout, username } = useAuth();
+  const { logout, username, isAdmin } = useAuth();
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
+
+  const navItems = allNavItems.filter(item => isAdmin || !item.adminOnly);
 
   return (
     <aside
@@ -87,7 +88,7 @@ export function AppSidebar() {
           {!collapsed && (
             <div className="flex-1 min-w-0">
               <p className="text-xs font-medium text-sidebar-accent-foreground truncate">{username}</p>
-              <p className="text-[10px] text-sidebar-foreground">Operator</p>
+              <p className="text-[10px] text-sidebar-foreground">{isAdmin ? "Admin" : "Operator"}</p>
             </div>
           )}
           <Button
