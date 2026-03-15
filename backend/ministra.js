@@ -553,6 +553,14 @@ async function deleteEpgSource(id) {
   console.log(`[ministra] Deleted EPG source #${id} from ${tableInfo.name}`);
 }
 
+async function updateEpgSourceUrl(id, newUrl) {
+  const p = getPool();
+  const tableInfo = await discoverEpgSourceTable();
+  if (!tableInfo) throw new Error('EPG source table not found');
+  await p.query(`UPDATE \`${tableInfo.name}\` SET \`${tableInfo.urlField}\` = ? WHERE id = ?`, [newUrl, id]);
+  console.log(`[ministra] Updated EPG source #${id} URL to ${newUrl}`);
+}
+
 async function toggleEpgSource(id, enabled) {
   const p = getPool();
   const tableInfo = await discoverEpgSourceTable();
@@ -577,5 +585,5 @@ module.exports = {
   syncStream, reconcileWithPanel, close, extractStreamKey,
   getItvColumns, deleteChannel, deleteChannels, updateChannel, reorderChannels,
   applyEpgIds, getEpgStatus,
-  getEpgSources, addEpgSource, deleteEpgSource, toggleEpgSource,
+  getEpgSources, addEpgSource, deleteEpgSource, toggleEpgSource, updateEpgSourceUrl,
 };

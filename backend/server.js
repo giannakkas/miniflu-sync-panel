@@ -797,10 +797,29 @@ app.post('/api/epg/providers/push-to-ministra', async (req, res) => {
     const directEnabled = providers.filter(p => p.type === 'direct' && p.enabled);
     if (directEnabled.length === 0) return res.json({ ok: true, pushed: 0, message: 'No enabled direct providers to push' });
 
+    // First: fix any .gz URLs in Ministra (Stalker 5.6.10 can't parse gzip)
+    try {
+      const existingSources = await ministra.getEpgSources();
+      if (Array.isArray(existingSources)) {
+        for (const src of existingSources) {
+          const url = src.uri || src.url || '';
+          if (url.endsWith('.xml.gz')) {
+            const fixedUrl = url.replace('.xml.gz', '.xml');
+            console.log(`[epg] Fixing gzip URL in Ministra: ${url} → ${fixedUrl}`);
+            await ministra.updateEpgSourceUrl(src.id, fixedUrl);
+          }
+        }
+      }
+    } catch (err) {
+      console.log(`[epg] Could not fix gz URLs: ${err.message}`);
+    }
+
     const results = [];
     for (const p of directEnabled) {
+      // Ensure we never push .gz URLs
+      const url = p.url.endsWith('.xml.gz') ? p.url.replace('.xml.gz', '.xml') : p.url;
       try {
-        const result = await ministra.addEpgSource(p.url, '');
+        const result = await ministra.addEpgSource(url, '');
         results.push({ name: p.name, ...result });
       } catch (err) {
         results.push({ name: p.name, action: 'error', error: err.message });

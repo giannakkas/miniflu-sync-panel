@@ -99,21 +99,21 @@ const providerCount = db.prepare('SELECT COUNT(*) as cnt FROM epg_providers').ge
 if (providerCount.cnt === 0) {
   const seedProviders = [
     // Egypt
-    { name: 'IPTV-EPG.org Egypt', country: 'EG', url: 'https://iptv-epg.org/files/epg-eg.xml.gz', format: 'xmltv', type: 'direct', channels: 107, notes: 'Free, auto-updated daily. 107 Egyptian channels.' },
+    { name: 'IPTV-EPG.org Egypt', country: 'EG', url: 'https://iptv-epg.org/files/epg-eg.xml', format: 'xmltv', type: 'direct', channels: 107, notes: 'Free, auto-updated daily. 107 Egyptian channels.' },
     { name: 'elcinema.com (iptv-org)', country: 'EG', url: 'https://github.com/iptv-org/epg/tree/master/sites/elcinema.com', format: 'xmltv', type: 'iptv-org-grabber', channels: 198, notes: 'Arabic movie/TV guide. Requires iptv-org grabber to generate XMLTV. 198 channels with xmltv-id mapping.' },
     { name: 'sat.tv Arabic (iptv-org)', country: 'EG', url: 'https://github.com/iptv-org/epg/tree/master/sites/sat.tv', format: 'xmltv', type: 'iptv-org-grabber', channels: 30308, notes: 'Massive Arabic satellite EPG. Covers Egypt, Saudi, UAE + all Arab countries. Requires iptv-org grabber.' },
     // UK
-    { name: 'IPTV-EPG.org UK', country: 'GB', url: 'https://iptv-epg.org/files/epg-gb.xml.gz', format: 'xmltv', type: 'direct', channels: 941, notes: 'Free, auto-updated daily. 941 UK channels.' },
+    { name: 'IPTV-EPG.org UK', country: 'GB', url: 'https://iptv-epg.org/files/epg-gb.xml', format: 'xmltv', type: 'direct', channels: 941, notes: 'Free, auto-updated daily. 941 UK channels.' },
     { name: 'Freeview-EPG (GitHub)', country: 'GB', url: 'https://raw.githubusercontent.com/dp247/Freeview-EPG/master/epg.xml', format: 'xmltv', type: 'direct', channels: 200, notes: 'Free UK Freeview EPG. 7 days data, updated every 12h. Regional support. GitHub: dp247/Freeview-EPG' },
     { name: 'freeview.co.uk (iptv-org)', country: 'GB', url: 'https://github.com/iptv-org/epg/tree/master/sites/freeview.co.uk', format: 'xmltv', type: 'iptv-org-grabber', channels: 166, notes: 'Official UK Freeview. 104 channels with xmltv-id. Requires iptv-org grabber.' },
     { name: 'sky.com (iptv-org)', country: 'GB', url: 'https://github.com/iptv-org/epg/tree/master/sites/sky.com', format: 'xmltv', type: 'iptv-org-grabber', channels: 542, notes: 'Sky UK EPG. 489 channels with xmltv-id. Requires iptv-org grabber.' },
     { name: 'mytelly.co.uk (iptv-org)', country: 'GB', url: 'https://github.com/iptv-org/epg/tree/master/sites/mytelly.co.uk', format: 'xmltv', type: 'iptv-org-grabber', channels: 488, notes: 'UK TV guide. 387 channels with xmltv-id. Requires iptv-org grabber.' },
     // UAE
-    { name: 'IPTV-EPG.org UAE', country: 'AE', url: 'https://iptv-epg.org/files/epg-ae.xml.gz', format: 'xmltv', type: 'direct', channels: 58, notes: 'Free, auto-updated daily. 58 UAE channels.' },
+    { name: 'IPTV-EPG.org UAE', country: 'AE', url: 'https://iptv-epg.org/files/epg-ae.xml', format: 'xmltv', type: 'direct', channels: 58, notes: 'Free, auto-updated daily. 58 UAE channels.' },
     { name: 'osn.com (iptv-org)', country: 'AE', url: 'https://github.com/iptv-org/epg/tree/master/sites/osn.com', format: 'xmltv', type: 'iptv-org-grabber', channels: 134, notes: 'OSN MENA channels. 86 with xmltv-id. Covers UAE, Saudi, Egypt. Requires iptv-org grabber.' },
     { name: 'bein.com (iptv-org)', country: 'AE', url: 'https://github.com/iptv-org/epg/tree/master/sites/bein.com', format: 'xmltv', type: 'iptv-org-grabber', channels: 134, notes: 'beIN Sports + Entertainment. All 134 with xmltv-id. Requires iptv-org grabber.' },
     // Saudi Arabia
-    { name: 'IPTV-EPG.org Saudi Arabia', country: 'SA', url: 'https://iptv-epg.org/files/epg-sa.xml.gz', format: 'xmltv', type: 'direct', channels: 138, notes: 'Free, auto-updated daily. 138 Saudi channels.' },
+    { name: 'IPTV-EPG.org Saudi Arabia', country: 'SA', url: 'https://iptv-epg.org/files/epg-sa.xml', format: 'xmltv', type: 'direct', channels: 138, notes: 'Free, auto-updated daily. 138 Saudi channels.' },
     { name: 'shahid.mbc.net (iptv-org)', country: 'SA', url: 'https://github.com/iptv-org/epg/tree/master/sites/shahid.mbc.net', format: 'xmltv', type: 'iptv-org-grabber', channels: 207, notes: 'MBC/Shahid channels. 168 with xmltv-id. Saudi + pan-Arab. Requires iptv-org grabber.' },
     { name: 'rotana.net (iptv-org)', country: 'SA', url: 'https://github.com/iptv-org/epg/tree/master/sites/rotana.net', format: 'xmltv', type: 'iptv-org-grabber', channels: 32, notes: 'Rotana TV channels. 26 with xmltv-id. Requires iptv-org grabber.' },
     // Multi-region
@@ -126,6 +126,9 @@ if (providerCount.cnt === 0) {
     insertProvider.run(p.name, p.country, p.url, p.format, p.type, p.channels, p.notes);
   }
 }
+
+// ── Fix .gz URLs (Ministra 5.6.10 can't parse gzip) ────────────────
+db.prepare("UPDATE epg_providers SET url = REPLACE(url, '.xml.gz', '.xml') WHERE url LIKE '%.xml.gz'").run();
 
 // ── Helpers ─────────────────────────────────────────────────────────
 function getSetting(key) {
