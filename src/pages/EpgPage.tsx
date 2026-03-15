@@ -132,14 +132,14 @@ const EpgPage = () => {
     setPushing(true);
     try {
       const result = await api.pushProvidersToMinistra();
-      if (result.pushed > 0) {
-        toast.success(`Pushed ${result.pushed} EPG source(s) to Ministra`, {
-          description: result.existing ? `${result.existing} already existed` : undefined,
-        });
-      } else if (result.existing > 0) {
-        toast.info(`All ${result.existing} sources already exist in Ministra`);
+      const parts = [];
+      if (result.pushed > 0) parts.push(`${result.pushed} added`);
+      if (result.existing > 0) parts.push(`${result.existing} already existed`);
+      if (result.cleaned > 0) parts.push(`${result.cleaned} old removed`);
+      if (result.pushed > 0 || result.cleaned > 0) {
+        toast.success(`Ministra EPG sources updated`, { description: parts.join(', ') });
       } else {
-        toast.warning('No enabled direct providers to push');
+        toast.info(parts.join(', ') || 'Sources already up to date');
       }
       await loadMinistraSources();
     } catch (err: any) {
@@ -569,7 +569,7 @@ const EpgPage = () => {
           <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
             <div>
               <h2 className="text-lg font-semibold text-foreground">2. Match Channels</h2>
-              <p className="text-xs text-muted-foreground mt-1">Match from M3U file or auto-detect using iptv-org database + MENA alias map</p>
+              <p className="text-xs text-muted-foreground mt-1">Match from M3U file or auto-detect from opop.pro (primary) + Freeview EPG (fallback)</p>
             </div>
             <div className="flex gap-2">
               <Button variant="outline" onClick={handleMatch} disabled={loading || autoLoading || !m3uText}>
@@ -646,9 +646,9 @@ const EpgPage = () => {
                           <td className="p-3 hidden lg:table-cell">
                             {m.matched_source && (
                               <span className={`text-xs px-2 py-0.5 rounded-full ${
-                                m.matched_source === 'iptv-org' ? 'bg-blue-500/10 text-blue-500' :
-                                m.matched_source === 'alias' ? 'bg-orange-500/10 text-orange-500' :
-                                'bg-green-500/10 text-green-500'
+                                m.matched_source === 'opop.pro' ? 'bg-green-500/10 text-green-500' :
+                                m.matched_source === 'freeview' ? 'bg-blue-500/10 text-blue-500' :
+                                'bg-muted text-muted-foreground'
                               }`}>
                                 {m.matched_source}
                               </span>
