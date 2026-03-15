@@ -31,7 +31,7 @@ async function fetchJSON(url, opts = {}) {
   const res = await fetch(url, {
     ...opts,
     headers: { ...authHeader(), ...opts.headers },
-    signal: AbortSignal.timeout(15000),
+    signal: AbortSignal.timeout(30000),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
@@ -68,10 +68,31 @@ async function fetchStreams() {
 }
 
 async function fetchV3(base) {
-  const data = await fetchJSON(`${base}/streamer/api/v3/streams`);
-  // v3 returns { streams: [...] } or an array directly depending on version
-  const arr = Array.isArray(data) ? data : (data.streams || []);
-  return arr.map(normalizeV3);
+  // Flussonic v3 API paginates - fetch all pages
+  let allStreams = [];
+  let cursor = '';
+  
+  while (true) {
+    const url = cursor 
+      ? `${base}/streamer/api/v3/streams?cursor=${encodeURIComponent(cursor)}&limit=1000`
+      : `${base}/streamer/api/v3/streams?limit=1000`;
+    
+    const data = await fetchJSON(url);
+    const arr = Array.isArray(data) ? data : (data.streams || []);
+    allStreams = allStreams.concat(arr.map(normalizeV3));
+    
+    // Check for next page cursor
+    if (data.next_cursor || data.cursor) {
+      const nextCursor = data.next_cursor || data.cursor;
+      if (nextCursor === cursor || arr.length === 0) break; // No more pages
+      cursor = nextCursor;
+    } else {
+      break; // No pagination info = single page
+    }
+  }
+  
+  console.log(`[flussonic] Fetched ${allStreams.length} streams from v3 API`);
+  return allStreams;
 }
 
 async function fetchLegacy(base) {
