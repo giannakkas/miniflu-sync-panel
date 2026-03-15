@@ -12,6 +12,7 @@ const { getSetting } = require('./db');
 let pool = null;
 let lastConfig = '';
 let itvColumns = null;
+let epgSourceTable = null;
 
 function getPoolConfig() {
   return {
@@ -35,6 +36,7 @@ function getPool() {
   pool = mysql.createPool(cfg);
   lastConfig = key;
   itvColumns = null;
+  epgSourceTable = null;
   return pool;
 }
 
@@ -418,43 +420,146 @@ async function getEpgStatus() {
   }));
 }
 
-// ── EPG Source management (Ministra epg table) ─────────────────────
+// ── EPG Source management (Ministra epg source table) ───────────────
+
+async function discoverEpgSourceTable() {
+  if (epgSourceTable) return epgSourceTable;
+  const p = getPool();
+  
+  // Candidate table names used by different Ministra/Stalker versions
+  const candidates = ['epg_url', 'epg_setting', 'epg_sources', 'epg_source'];
+  
+  // First check candidate tables
+  for (const table of candidates) {
+    try {
+      const [cols] = await p.query(`SHOW COLUMNS FROM ${table}`);
+      const colNames = cols.map(c => c.Field);
+      if (colNames.includes('uri') || colNames.includes('url')) {
+        epgSourceTable = { name: table, cols: colNames, urlField: colNames.includes('uri') ? 'uri' : 'url' };
+        console.log(`[ministra] Found EPG source table: ${table} (columns: ${colNames.join(', ')})`);
+        return epgSourceTable;
+      }
+    } catch {
+      // Table doesn't exist, skip
+    }
+  }
+  
+  // Check the main 'epg' table - it might be the source table if it has few rows and a uri/url column
+  try {
+    const [cols] = await p.query('SHOW COLUMNS FROM epg');
+    const colNames = cols.map(c => c.Field);
+    if (colNames.includes('uri') || colNames.includes('url')) {
+      // Check row count - if it's small (< 50), it's likely the source config table
+      const [cnt] = await p.query('SELECT COUNT(*) as c FROM epg');
+      if (cnt[0].c < 50) {
+        epgSourceTable = { name: 'epg', cols: colNames, urlField: colNames.includes('uri') ? 'uri' : 'url' };
+        console.log(`[ministra] EPG source table is 'epg' (${cnt[0].c} rows, columns: ${colNames.join(', ')})`);
+        return epgSourceTable;
+      }
+      // Has uri column but too many rows - might be mixed. Log the schema for debugging
+      console.log(`[ministra] 'epg' table has ${cnt[0].c} rows and uri column. Schema: ${colNames.join(', ')}`);
+    }
+  } catch {}
+
+  // Last resort: search ALL tables for one with 'uri' field and few rows
+  try {
+    const [tables] = await p.query("SHOW TABLES");
+    for (const row of tables) {
+      const table = Object.values(row)[0];
+      if (!table.toLowerCase().includes('epg')) continue;
+      try {
+        const [cols] = await p.query(`SHOW COLUMNS FROM \`${table}\``);
+        const colNames = cols.map(c => c.Field);
+        console.log(`[ministra] EPG-related table '${table}': ${colNames.join(', ')}`);
+        if (colNames.includes('uri') || colNames.includes('url')) {
+          const [cnt] = await p.query(`SELECT COUNT(*) as c FROM \`${table}\``);
+          if (cnt[0].c < 100) {
+            epgSourceTable = { name: table, cols: colNames, urlField: colNames.includes('uri') ? 'uri' : 'url' };
+            console.log(`[ministra] Using '${table}' as EPG source table (${cnt[0].c} rows)`);
+            return epgSourceTable;
+          }
+        }
+      } catch {}
+    }
+  } catch {}
+
+  console.error('[ministra] Could not find EPG source table!');
+  return null;
+}
 
 async function getEpgSources() {
   const p = getPool();
+  const tableInfo = await discoverEpgSourceTable();
+  
+  if (!tableInfo) {
+    // Fallback: dump all epg-related table names for debugging
+    try {
+      const [tables] = await p.query("SHOW TABLES");
+      const epgTables = [];
+      for (const row of tables) {
+        const t = Object.values(row)[0];
+        if (t.toLowerCase().includes('epg')) epgTables.push(t);
+      }
+      console.log(`[ministra] EPG-related tables found: ${epgTables.join(', ') || 'none'}`);
+      return { error: 'EPG source table not found', epg_tables: epgTables };
+    } catch (err) {
+      return { error: err.message };
+    }
+  }
+
   try {
-    const [rows] = await p.query('SELECT * FROM epg ORDER BY id ASC');
+    const [rows] = await p.query(`SELECT * FROM \`${tableInfo.name}\` ORDER BY id ASC`);
     return rows;
   } catch (err) {
-    console.error(`[ministra] Failed to read epg table: ${err.message}`);
+    console.error(`[ministra] Failed to read ${tableInfo.name}: ${err.message}`);
     return [];
   }
 }
 
 async function addEpgSource(uri, prefix) {
   const p = getPool();
+  const tableInfo = await discoverEpgSourceTable();
+  if (!tableInfo) throw new Error('EPG source table not found in Ministra database');
+
+  const urlField = tableInfo.urlField;
+  
   // Check if this URL already exists
-  const [existing] = await p.query('SELECT id FROM epg WHERE uri = ?', [uri]);
+  const [existing] = await p.query(`SELECT id FROM \`${tableInfo.name}\` WHERE \`${urlField}\` = ?`, [uri]);
   if (existing.length > 0) {
     return { action: 'exists', id: existing[0].id };
   }
-  const [result] = await p.query(
-    'INSERT INTO epg (uri, prefix, status) VALUES (?, ?, 1)',
-    [uri, prefix || '']
-  );
-  console.log(`[ministra] Added EPG source #${result.insertId}: ${uri}`);
+
+  // Build insert based on available columns
+  const cols = tableInfo.cols;
+  const insertCols = [urlField];
+  const insertVals = [uri];
+  const placeholders = ['?'];
+
+  if (cols.includes('prefix')) { insertCols.push('prefix'); insertVals.push(prefix || ''); placeholders.push('?'); }
+  if (cols.includes('status')) { insertCols.push('status'); insertVals.push(1); placeholders.push('?'); }
+  if (cols.includes('enabled')) { insertCols.push('enabled'); insertVals.push(1); placeholders.push('?'); }
+
+  const sql = `INSERT INTO \`${tableInfo.name}\` (${insertCols.map(c => '`'+c+'`').join(', ')}) VALUES (${placeholders.join(', ')})`;
+  const [result] = await p.query(sql, insertVals);
+  console.log(`[ministra] Added EPG source #${result.insertId} to ${tableInfo.name}: ${uri}`);
   return { action: 'created', id: result.insertId };
 }
 
 async function deleteEpgSource(id) {
   const p = getPool();
-  await p.query('DELETE FROM epg WHERE id = ?', [id]);
-  console.log(`[ministra] Deleted EPG source #${id}`);
+  const tableInfo = await discoverEpgSourceTable();
+  if (!tableInfo) throw new Error('EPG source table not found');
+  await p.query(`DELETE FROM \`${tableInfo.name}\` WHERE id = ?`, [id]);
+  console.log(`[ministra] Deleted EPG source #${id} from ${tableInfo.name}`);
 }
 
 async function toggleEpgSource(id, enabled) {
   const p = getPool();
-  await p.query('UPDATE epg SET status = ? WHERE id = ?', [enabled ? 1 : 0, id]);
+  const tableInfo = await discoverEpgSourceTable();
+  if (!tableInfo) throw new Error('EPG source table not found');
+  const statusCol = tableInfo.cols.includes('status') ? 'status' : tableInfo.cols.includes('enabled') ? 'enabled' : null;
+  if (!statusCol) throw new Error('No status/enabled column found');
+  await p.query(`UPDATE \`${tableInfo.name}\` SET \`${statusCol}\` = ? WHERE id = ?`, [enabled ? 1 : 0, id]);
 }
 
 // ── Close ───────────────────────────────────────────────────────────

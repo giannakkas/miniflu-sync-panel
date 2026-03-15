@@ -821,7 +821,11 @@ app.post('/api/epg/providers/push-to-ministra', async (req, res) => {
 app.get('/api/epg/ministra-sources', async (req, res) => {
   try {
     const sources = await ministra.getEpgSources();
-    res.json(sources);
+    // If it's an error object with diagnostics, return it
+    if (sources && sources.error) {
+      return res.json({ sources: [], debug: sources });
+    }
+    res.json(Array.isArray(sources) ? sources : []);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

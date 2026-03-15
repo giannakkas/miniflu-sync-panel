@@ -108,9 +108,20 @@ const EpgPage = () => {
     try {
       setMinistraLoading(true);
       const data = await api.getMinistraEpgSources();
-      setMinistraSources(data);
+      if (Array.isArray(data)) {
+        setMinistraSources(data);
+      } else if (data && data.sources) {
+        setMinistraSources(data.sources);
+        if (data.debug) {
+          console.log('Ministra EPG debug:', data.debug);
+          if (data.debug.epg_tables) {
+            toast.info(`EPG source table not found. Tables found: ${data.debug.epg_tables.join(', ') || 'none'}`, { duration: 8000 });
+          }
+        }
+      } else {
+        setMinistraSources([]);
+      }
     } catch (err: any) {
-      // Silently fail - table may not exist yet
       console.log('Failed to load Ministra sources:', err.message);
     } finally {
       setMinistraLoading(false);
@@ -475,31 +486,35 @@ const EpgPage = () => {
 
           {ministraSources.length > 0 ? (
             <div className="space-y-2">
-              {ministraSources.map(s => (
-                <div key={s.id} className="flex items-center gap-3 px-4 py-3 border border-border rounded-lg bg-card">
-                  <span className={`w-2 h-2 rounded-full shrink-0 ${s.status ? 'bg-green-500' : 'bg-red-400'}`} />
-                  <span className="text-xs font-mono text-muted-foreground w-8 shrink-0">#{s.id}</span>
-                  <code className="text-xs font-mono text-foreground flex-1 truncate">{s.uri}</code>
-                  {s.prefix && (
-                    <span className="text-[10px] bg-muted px-2 py-0.5 rounded text-muted-foreground shrink-0">
-                      prefix: {s.prefix}
-                    </span>
-                  )}
-                  {s.updated && (
-                    <span className="text-[10px] text-muted-foreground shrink-0">
-                      {new Date(s.updated).toLocaleDateString()}
-                    </span>
-                  )}
-                  <Button
-                    variant="ghost" size="sm"
-                    className="h-7 w-7 p-0 text-destructive hover:text-destructive shrink-0"
-                    onClick={() => handleDeleteMinistraSource(s.id)}
-                    title="Delete from Ministra"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </Button>
-                </div>
-              ))}
+              {ministraSources.map((s: any) => {
+                const sourceUrl = s.uri || s.url || '';
+                const sourceStatus = s.status !== undefined ? s.status : s.enabled;
+                return (
+                  <div key={s.id} className="flex items-center gap-3 px-4 py-3 border border-border rounded-lg bg-card">
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${sourceStatus ? 'bg-green-500' : 'bg-red-400'}`} />
+                    <span className="text-xs font-mono text-muted-foreground w-8 shrink-0">#{s.id}</span>
+                    {s.prefix && (
+                      <span className="text-[10px] bg-muted px-2 py-0.5 rounded text-muted-foreground shrink-0">
+                        {s.prefix}
+                      </span>
+                    )}
+                    <code className="text-xs font-mono text-foreground flex-1 truncate" title={sourceUrl}>{sourceUrl || JSON.stringify(s).slice(0, 120)}</code>
+                    {(s.updated || s.update_date) && (
+                      <span className="text-[10px] text-muted-foreground shrink-0">
+                        {new Date(s.updated || s.update_date).toLocaleDateString()}
+                      </span>
+                    )}
+                    <Button
+                      variant="ghost" size="sm"
+                      className="h-7 w-7 p-0 text-destructive hover:text-destructive shrink-0"
+                      onClick={() => handleDeleteMinistraSource(s.id)}
+                      title="Delete from Ministra"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                );
+              })}
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">
