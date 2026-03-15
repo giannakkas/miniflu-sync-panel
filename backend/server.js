@@ -552,6 +552,47 @@ app.post('/api/epg/auto-match', async (req, res) => {
   }
 });
 
+// ─── EPG PROVIDERS ──────────────────────────────────────────────────
+app.get('/api/epg/providers', (req, res) => {
+  try {
+    const providers = db.getEpgProviders();
+    res.json(providers);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/epg/providers', (req, res) => {
+  try {
+    const { name, country, url, format, type, channels, enabled, notes } = req.body;
+    if (!name || !url) return res.status(400).json({ error: 'name and url are required' });
+    const result = db.addEpgProvider({ name, country, url, format, type, channels, enabled, notes });
+    res.json({ ok: true, id: result.lastInsertRowid });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/epg/providers/:id', (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    db.updateEpgProvider(id, req.body);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/epg/providers/:id', (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    db.deleteEpgProvider(id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── LOGS ───────────────────────────────────────────────────────────
 app.get('/api/logs', (req, res) => {
   const limit = parseInt(req.query.limit) || 100;

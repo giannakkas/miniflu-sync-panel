@@ -68,4 +68,13 @@ export const api = {
   applyEpg: (mappings: { id: number; xmltv_id: string; logo?: string }[]) =>
     request('POST', '/epg/apply', { mappings }),
   getEpgStatus: () => request('GET', '/epg/status'),
+
+  // EPG Providers
+  getEpgProviders: () => request('GET', '/epg/providers'),
+  addEpgProvider: (provider: Record<string, any>) =>
+    request('POST', '/epg/providers', provider),
+  updateEpgProvider: (id: number, fields: Record<string, any>) =>
+    request('PUT', `/epg/providers/${id}`, fields),
+  deleteEpgProvider: (id: number) =>
+    request('DELETE', `/epg/providers/${id}`),
 };

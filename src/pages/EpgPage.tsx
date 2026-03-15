@@ -1,12 +1,16 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
-import { Upload, Globe, Send, Loader2, CheckCircle, XCircle, Search, Wand2 } from "lucide-react";
+import {
+  Upload, Globe, Send, Loader2, CheckCircle, XCircle, Search, Wand2,
+  Plus, Trash2, ExternalLink, Copy, ChevronDown, ChevronUp, Satellite
+} from "lucide-react";
 
 interface EpgMatch {
   id: number;
@@ -20,6 +24,35 @@ interface EpgMatch {
   matched: boolean;
 }
 
+interface EpgProvider {
+  id: number;
+  name: string;
+  country: string;
+  url: string;
+  format: string;
+  type: string;
+  channels: number;
+  enabled: number;
+  notes: string;
+  created_at: string;
+}
+
+const COUNTRY_FLAGS: Record<string, string> = {
+  EG: '🇪🇬', GB: '🇬🇧', AE: '🇦🇪', SA: '🇸🇦', ALL: '🌍', CY: '🇨🇾',
+  US: '🇺🇸', DE: '🇩🇪', FR: '🇫🇷', TR: '🇹🇷', GR: '🇬🇷', IT: '🇮🇹',
+};
+
+const COUNTRY_NAMES: Record<string, string> = {
+  EG: 'Egypt', GB: 'United Kingdom', AE: 'UAE', SA: 'Saudi Arabia', ALL: 'Multi-region',
+  CY: 'Cyprus', US: 'United States', DE: 'Germany', FR: 'France', TR: 'Turkey', GR: 'Greece', IT: 'Italy',
+};
+
+const TYPE_LABELS: Record<string, { label: string; color: string }> = {
+  direct: { label: 'Direct XMLTV', color: 'bg-green-500/10 text-green-500' },
+  'iptv-org-grabber': { label: 'iptv-org Grabber', color: 'bg-amber-500/10 text-amber-500' },
+  api: { label: 'JSON API', color: 'bg-blue-500/10 text-blue-500' },
+};
+
 const EpgPage = () => {
   const [m3uText, setM3uText] = useState("");
   const [m3uUrl, setM3uUrl] = useState("");
@@ -28,9 +61,73 @@ const EpgPage = () => {
   const [autoLoading, setAutoLoading] = useState(false);
   const [applying, setApplying] = useState(false);
   const [search, setSearch] = useState("");
-
-  // Override matched tvg_id per channel
   const [overrides, setOverrides] = useState<Record<number, string>>({});
+
+  // Providers state
+  const [providers, setProviders] = useState<EpgProvider[]>([]);
+  const [providersLoading, setProvidersLoading] = useState(true);
+  const [providersExpanded, setProvidersExpanded] = useState(true);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newProvider, setNewProvider] = useState({
+    name: '', country: '', url: '', format: 'xmltv', type: 'direct', channels: 0, notes: ''
+  });
+  const [countryFilter, setCountryFilter] = useState<string>('ALL');
+
+  useEffect(() => {
+    loadProviders();
+  }, []);
+
+  const loadProviders = async () => {
+    try {
+      setProvidersLoading(true);
+      const data = await api.getEpgProviders();
+      setProviders(data);
+    } catch (err: any) {
+      toast.error(`Failed to load providers: ${err.message}`);
+    } finally {
+      setProvidersLoading(false);
+    }
+  };
+
+  const toggleProvider = async (id: number, enabled: boolean) => {
+    try {
+      await api.updateEpgProvider(id, { enabled });
+      setProviders(prev => prev.map(p => p.id === id ? { ...p, enabled: enabled ? 1 : 0 } : p));
+    } catch (err: any) {
+      toast.error(`Failed to toggle provider: ${err.message}`);
+    }
+  };
+
+  const handleDeleteProvider = async (id: number) => {
+    try {
+      await api.deleteEpgProvider(id);
+      setProviders(prev => prev.filter(p => p.id !== id));
+      toast.success('Provider deleted');
+    } catch (err: any) {
+      toast.error(`Failed to delete: ${err.message}`);
+    }
+  };
+
+  const handleAddProvider = async () => {
+    if (!newProvider.name || !newProvider.url) {
+      toast.error('Name and URL are required');
+      return;
+    }
+    try {
+      await api.addEpgProvider(newProvider);
+      setShowAddForm(false);
+      setNewProvider({ name: '', country: '', url: '', format: 'xmltv', type: 'direct', channels: 0, notes: '' });
+      await loadProviders();
+      toast.success('Provider added');
+    } catch (err: any) {
+      toast.error(`Failed to add provider: ${err.message}`);
+    }
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success('URL copied to clipboard');
+  };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -123,10 +220,16 @@ const EpgPage = () => {
 
   const matchedCount = matches.filter(m => m.matched || overrides[m.id]).length;
   const unmatchedCount = matches.length - matchedCount;
+  const filtered = matches.filter(m => !search || m.name.toLowerCase().includes(search.toLowerCase()));
 
-  const filtered = matches.filter(m =>
-    !search || m.name.toLowerCase().includes(search.toLowerCase())
-  );
+  // Country filter for providers
+  const countries = [...new Set(providers.map(p => p.country))].sort();
+  const filteredProviders = countryFilter === 'ALL'
+    ? providers
+    : providers.filter(p => p.country === countryFilter);
+
+  const directProviders = filteredProviders.filter(p => p.type === 'direct');
+  const grabberProviders = filteredProviders.filter(p => p.type !== 'direct');
 
   return (
     <DashboardLayout>
@@ -134,11 +237,157 @@ const EpgPage = () => {
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-foreground">EPG Management</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Import EPG IDs from iptveditor.com M3U and push to Ministra
+            Manage EPG providers, import EPG IDs, and push to Ministra
           </p>
         </div>
 
-        {/* Step 1: Load M3U */}
+        {/* ── EPG PROVIDERS ─────────────────────────────────────── */}
+        <Card className="p-6 bg-card border border-border mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3 cursor-pointer select-none" onClick={() => setProvidersExpanded(!providersExpanded)}>
+              <Satellite className="w-5 h-5 text-primary" />
+              <h2 className="text-lg font-semibold text-foreground">EPG Providers</h2>
+              <span className="text-xs bg-muted px-2 py-0.5 rounded-full text-muted-foreground">
+                {providers.filter(p => p.enabled).length}/{providers.length} active
+              </span>
+              {providersExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+            </div>
+            <Button variant="outline" size="sm" onClick={() => { setShowAddForm(!showAddForm); setProvidersExpanded(true); }}>
+              <Plus className="w-4 h-4 mr-1" />
+              Add Provider
+            </Button>
+          </div>
+
+          {providersExpanded && (
+            <>
+              {/* Country filter tabs */}
+              <div className="flex flex-wrap gap-1.5 mb-4">
+                <button
+                  onClick={() => setCountryFilter('ALL')}
+                  className={`text-xs px-3 py-1.5 rounded-full transition-colors ${countryFilter === 'ALL' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground'}`}
+                >
+                  All ({providers.length})
+                </button>
+                {countries.filter(c => c !== 'ALL').map(c => (
+                  <button
+                    key={c}
+                    onClick={() => setCountryFilter(c)}
+                    className={`text-xs px-3 py-1.5 rounded-full transition-colors ${countryFilter === c ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground'}`}
+                  >
+                    {COUNTRY_FLAGS[c] || ''} {COUNTRY_NAMES[c] || c} ({providers.filter(p => p.country === c).length})
+                  </button>
+                ))}
+              </div>
+
+              {/* Add form */}
+              {showAddForm && (
+                <div className="bg-muted/50 border border-border rounded-lg p-4 mb-4">
+                  <h3 className="text-sm font-semibold text-foreground mb-3">Add Custom Provider</h3>
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-3">
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Name *</Label>
+                      <Input value={newProvider.name} onChange={e => setNewProvider(p => ({ ...p, name: e.target.value }))} placeholder="e.g. My EPG Source" className="h-9 text-sm mt-1" />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">URL *</Label>
+                      <Input value={newProvider.url} onChange={e => setNewProvider(p => ({ ...p, url: e.target.value }))} placeholder="https://..." className="h-9 text-sm font-mono mt-1" />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Country Code</Label>
+                      <Input value={newProvider.country} onChange={e => setNewProvider(p => ({ ...p, country: e.target.value.toUpperCase() }))} placeholder="GB, EG, AE, SA..." className="h-9 text-sm mt-1" maxLength={3} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 mb-3">
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Type</Label>
+                      <select
+                        value={newProvider.type}
+                        onChange={e => setNewProvider(p => ({ ...p, type: e.target.value }))}
+                        className="w-full h-9 text-sm rounded-md border border-input bg-background px-3 mt-1"
+                      >
+                        <option value="direct">Direct XMLTV URL</option>
+                        <option value="iptv-org-grabber">iptv-org Grabber</option>
+                        <option value="api">JSON API</option>
+                      </select>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Format</Label>
+                      <select
+                        value={newProvider.format}
+                        onChange={e => setNewProvider(p => ({ ...p, format: e.target.value }))}
+                        className="w-full h-9 text-sm rounded-md border border-input bg-background px-3 mt-1"
+                      >
+                        <option value="xmltv">XMLTV (.xml / .xml.gz)</option>
+                        <option value="json">JSON</option>
+                      </select>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Channels (approx)</Label>
+                      <Input type="number" value={newProvider.channels || ''} onChange={e => setNewProvider(p => ({ ...p, channels: parseInt(e.target.value) || 0 }))} className="h-9 text-sm mt-1" />
+                    </div>
+                    <div className="flex items-end">
+                      <Button size="sm" onClick={handleAddProvider} className="h-9 w-full">
+                        <Plus className="w-4 h-4 mr-1" /> Add
+                      </Button>
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Notes</Label>
+                    <Input value={newProvider.notes} onChange={e => setNewProvider(p => ({ ...p, notes: e.target.value }))} placeholder="Optional notes..." className="h-9 text-sm mt-1" />
+                  </div>
+                </div>
+              )}
+
+              {/* Direct XMLTV providers */}
+              {directProviders.length > 0 && (
+                <div className="mb-4">
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                    Direct XMLTV Sources — ready to use in Ministra
+                  </h3>
+                  <div className="space-y-2">
+                    {directProviders.map(p => (
+                      <ProviderRow
+                        key={p.id}
+                        provider={p}
+                        onToggle={toggleProvider}
+                        onDelete={handleDeleteProvider}
+                        onCopy={copyToClipboard}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Grabber / API providers */}
+              {grabberProviders.length > 0 && (
+                <div>
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                    Grabber / API Sources — require iptv-org grabber or processing
+                  </h3>
+                  <div className="space-y-2">
+                    {grabberProviders.map(p => (
+                      <ProviderRow
+                        key={p.id}
+                        provider={p}
+                        onToggle={toggleProvider}
+                        onDelete={handleDeleteProvider}
+                        onCopy={copyToClipboard}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {providersLoading && (
+                <div className="flex items-center gap-2 text-muted-foreground text-sm py-4">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Loading providers...
+                </div>
+              )}
+            </>
+          )}
+        </Card>
+
+        {/* ── M3U IMPORT ────────────────────────────────────────── */}
         <Card className="p-6 bg-card border border-border mb-6">
           <h2 className="text-lg font-semibold text-foreground mb-4">1. Load M3U from iptveditor</h2>
           <div className="grid lg:grid-cols-2 gap-6">
@@ -270,5 +519,82 @@ const EpgPage = () => {
     </DashboardLayout>
   );
 };
+
+// ── Provider Row Component ──────────────────────────────────────────
+function ProviderRow({ provider: p, onToggle, onDelete, onCopy }: {
+  provider: EpgProvider;
+  onToggle: (id: number, enabled: boolean) => void;
+  onDelete: (id: number) => void;
+  onCopy: (text: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const typeInfo = TYPE_LABELS[p.type] || { label: p.type, color: 'bg-muted text-muted-foreground' };
+  const flag = COUNTRY_FLAGS[p.country] || '🌐';
+  const isDirect = p.type === 'direct';
+
+  return (
+    <div className={`border border-border rounded-lg transition-colors ${p.enabled ? 'bg-card' : 'bg-muted/30 opacity-70'}`}>
+      <div className="flex items-center gap-3 px-4 py-3">
+        <Switch
+          checked={!!p.enabled}
+          onCheckedChange={(v) => onToggle(p.id, v)}
+          className="data-[state=checked]:bg-green-500 shrink-0"
+        />
+        <span className="text-lg shrink-0">{flag}</span>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-medium text-sm text-foreground truncate">{p.name}</span>
+            <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium shrink-0 ${typeInfo.color}`}>
+              {typeInfo.label}
+            </span>
+            <span className="text-[10px] text-muted-foreground shrink-0">
+              ~{p.channels.toLocaleString()} ch
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          {isDirect && (
+            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => onCopy(p.url)} title="Copy URL">
+              <Copy className="w-3.5 h-3.5" />
+            </Button>
+          )}
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => window.open(p.url, '_blank')} title="Open URL">
+            <ExternalLink className="w-3.5 h-3.5" />
+          </Button>
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setExpanded(!expanded)} title="Details">
+            {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          </Button>
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive hover:text-destructive" onClick={() => onDelete(p.id)} title="Delete">
+            <Trash2 className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+      </div>
+      {expanded && (
+        <div className="px-4 pb-3 pt-0 border-t border-border">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 mt-2">
+            <div>
+              <span className="text-[10px] uppercase text-muted-foreground font-semibold">URL</span>
+              <div className="flex items-center gap-1 mt-0.5">
+                <code className="text-xs font-mono text-foreground bg-muted px-2 py-1 rounded break-all flex-1">{p.url}</code>
+                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0" onClick={() => onCopy(p.url)}>
+                  <Copy className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </div>
+            <div>
+              <span className="text-[10px] uppercase text-muted-foreground font-semibold">Notes</span>
+              <p className="text-xs text-muted-foreground mt-0.5">{p.notes || '—'}</p>
+            </div>
+          </div>
+          <div className="flex gap-4 mt-2 text-[10px] text-muted-foreground">
+            <span>Format: <strong className="text-foreground">{p.format}</strong></span>
+            <span>Country: <strong className="text-foreground">{COUNTRY_NAMES[p.country] || p.country}</strong></span>
+            <span>Added: <strong className="text-foreground">{p.created_at ? new Date(p.created_at + 'Z').toLocaleDateString() : '—'}</strong></span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default EpgPage;
