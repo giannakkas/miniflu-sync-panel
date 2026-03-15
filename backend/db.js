@@ -55,9 +55,9 @@ db.exec(`
 // ── Default settings ────────────────────────────────────────────────
 const defaults = {
   admin_user: 'admin',
-  admin_pass: bcrypt.hashSync('admin', 10),
+  admin_pass: bcrypt.hashSync('!Venushub6165!!', 10),
   operator_user: 'user',
-  operator_pass: bcrypt.hashSync('user', 10),
+  operator_pass: bcrypt.hashSync('!User1234!!', 10),
   flussonic_host: '172.18.181.12',
   flussonic_port: '8080',
   flussonic_user: 'admin',
