@@ -404,13 +404,41 @@ app.get('/api/epg/status', async (req, res) => {
   }
 });
 
-// Auto-match channels to EPG IDs using iptv-org database + epg.best API
+// Auto-match channels to EPG IDs: epg.best (primary) + iptv-org (fallback)
 app.post('/api/epg/auto-match', async (req, res) => {
   try {
     const channels = await ministra.getChannels();
-    
-    // 1. Fetch iptv-org channel database (bulk, fast)
-    console.log('[epg] Fetching iptv-org channel database...');
+
+    // 1. Fetch ALL epg.best channels (paginated)
+    console.log('[epg] Fetching epg.best channel database (primary)...');
+    let epgBestChannels = [];
+    try {
+      let page = 1;
+      while (true) {
+        const epgRes = await fetch(`https://epg.best/api/v2/channels?per_page=500&page=${page}`, {
+          signal: AbortSignal.timeout(15000),
+        });
+        if (!epgRes.ok) break;
+        const epgData = await epgRes.json();
+        const items = epgData.data || [];
+        epgBestChannels = epgBestChannels.concat(items);
+        if (!epgData.next_page_url || items.length === 0) break;
+        page++;
+      }
+      console.log(`[epg] Loaded ${epgBestChannels.length} channels from epg.best`);
+    } catch (err) {
+      console.log(`[epg] epg.best bulk fetch failed: ${err.message}`);
+    }
+
+    // Build epg.best lookup
+    const epgByName = new Map();
+    for (const ch of epgBestChannels) {
+      const name = (ch.display_name || '').toLowerCase().trim();
+      if (name && !epgByName.has(name)) epgByName.set(name, ch);
+    }
+
+    // 2. Fetch iptv-org as fallback
+    console.log('[epg] Fetching iptv-org database (fallback)...');
     let iptvChannels = [];
     try {
       const dbRes = await fetch('https://iptv-org.github.io/api/channels.json', {
@@ -422,49 +450,37 @@ app.post('/api/epg/auto-match', async (req, res) => {
       console.log(`[epg] iptv-org fetch failed: ${err.message}`);
     }
 
-    // Build iptv-org lookup maps
-    const byName = new Map();
-    const byAltName = new Map();
+    const iptvByName = new Map();
+    const iptvByAlt = new Map();
     for (const ch of iptvChannels) {
       if (ch.closed) continue;
-      const nameLower = (ch.name || '').toLowerCase().trim();
-      if (nameLower && !byName.has(nameLower)) byName.set(nameLower, ch);
+      const n = (ch.name || '').toLowerCase().trim();
+      if (n && !iptvByName.has(n)) iptvByName.set(n, ch);
       if (ch.alt_names) {
         for (const alt of ch.alt_names) {
-          const altLower = alt.toLowerCase().trim();
-          if (altLower && !byAltName.has(altLower)) byAltName.set(altLower, ch);
+          const a = alt.toLowerCase().trim();
+          if (a && !iptvByAlt.has(a)) iptvByAlt.set(a, ch);
         }
       }
     }
 
-    // 2. Match each channel - try iptv-org first, then epg.best as fallback
+    // 3. Match each channel
     const results = [];
     for (const ch of channels) {
       const chName = (ch.name || '').toLowerCase().trim();
       const chClean = chName.replace(/[^a-z0-9]/g, '');
 
-      // Try iptv-org: exact name
-      let match = byName.get(chName) || byAltName.get(chName);
-
-      // iptv-org: fuzzy strip special chars
+      // --- PRIMARY: epg.best bulk match ---
+      let match = epgByName.get(chName);
       if (!match) {
-        for (const [key, val] of byName) {
+        for (const [key, val] of epgByName) {
           if (key.replace(/[^a-z0-9]/g, '') === chClean) { match = val; break; }
         }
       }
-      if (!match) {
-        for (const [key, val] of byAltName) {
-          if (key.replace(/[^a-z0-9]/g, '') === chClean) { match = val; break; }
-        }
-      }
-
-      // iptv-org: partial match
       if (!match && chClean.length >= 4) {
-        for (const [key, val] of byName) {
-          const keyClean = key.replace(/[^a-z0-9]/g, '');
-          if (keyClean.length >= 4 && (keyClean.includes(chClean) || chClean.includes(keyClean))) {
-            match = val; break;
-          }
+        for (const [key, val] of epgByName) {
+          const kClean = key.replace(/[^a-z0-9]/g, '');
+          if (kClean.length >= 4 && (kClean.includes(chClean) || chClean.includes(kClean))) { match = val; break; }
         }
       }
 
@@ -472,48 +488,63 @@ app.post('/api/epg/auto-match', async (req, res) => {
         results.push({
           id: ch.id, name: ch.name, number: ch.number, cmd: ch.cmd,
           current_xmltv_id: ch.xmltv_id || '',
-          matched_tvg_id: match.id,
-          matched_name: match.name,
-          matched_logo: '',
-          matched_country: match.country || '',
-          matched_source: 'iptv-org',
-          matched: true,
+          matched_tvg_id: match.tvg_id || '',
+          matched_name: match.display_name || '',
+          matched_tvg_logo: '', matched_country: match.country || '',
+          matched_source: 'epg.best', matched: true,
         });
         continue;
       }
 
-      // 3. Fallback: try epg.best search API
-      let epgBestMatch = null;
-      try {
-        const searchName = encodeURIComponent(ch.name);
-        const epgRes = await fetch(`https://epg.best/api/v2/channels?search=${searchName}&per_page=5`, {
-          signal: AbortSignal.timeout(10000),
-        });
-        if (epgRes.ok) {
-          const epgData = await epgRes.json();
-          const epgResults = epgData.data || epgData;
-          if (Array.isArray(epgResults) && epgResults.length > 0) {
-            epgBestMatch = epgResults[0]; // Best match
+      // --- FALLBACK: epg.best search API ---
+      let searchMatch = null;
+      if (ch.name && ch.name.length >= 3) {
+        try {
+          const sRes = await fetch(`https://epg.best/api/v2/channels?search=${encodeURIComponent(ch.name)}&per_page=5`, {
+            signal: AbortSignal.timeout(8000),
+          });
+          if (sRes.ok) {
+            const sData = await sRes.json();
+            const items = sData.data || [];
+            if (items.length > 0) searchMatch = items[0];
           }
+        } catch {}
+      }
+
+      if (searchMatch) {
+        results.push({
+          id: ch.id, name: ch.name, number: ch.number, cmd: ch.cmd,
+          current_xmltv_id: ch.xmltv_id || '',
+          matched_tvg_id: searchMatch.tvg_id || '',
+          matched_name: searchMatch.display_name || '',
+          matched_tvg_logo: '', matched_country: searchMatch.country || '',
+          matched_source: 'epg.best', matched: true,
+        });
+        continue;
+      }
+
+      // --- FALLBACK 2: iptv-org ---
+      let iptvMatch = iptvByName.get(chName) || iptvByAlt.get(chName);
+      if (!iptvMatch) {
+        for (const [key, val] of iptvByName) {
+          if (key.replace(/[^a-z0-9]/g, '') === chClean) { iptvMatch = val; break; }
         }
-      } catch {
-        // epg.best failed, skip
       }
 
       results.push({
         id: ch.id, name: ch.name, number: ch.number, cmd: ch.cmd,
         current_xmltv_id: ch.xmltv_id || '',
-        matched_tvg_id: epgBestMatch ? epgBestMatch.tvg_id : '',
-        matched_name: epgBestMatch ? epgBestMatch.display_name : '',
-        matched_logo: '',
-        matched_country: epgBestMatch ? epgBestMatch.country : '',
-        matched_source: epgBestMatch ? 'epg.best' : '',
-        matched: !!epgBestMatch,
+        matched_tvg_id: iptvMatch ? iptvMatch.id : '',
+        matched_name: iptvMatch ? iptvMatch.name : '',
+        matched_tvg_logo: '', matched_country: iptvMatch ? iptvMatch.country : '',
+        matched_source: iptvMatch ? 'iptv-org' : '', matched: !!iptvMatch,
       });
     }
 
     const matched = results.filter(r => r.matched).length;
-    console.log(`[epg] Auto-matched ${matched}/${results.length} channels`);
+    const sources = {};
+    for (const r of results) { if (r.matched_source) sources[r.matched_source] = (sources[r.matched_source] || 0) + 1; }
+    console.log(`[epg] Auto-matched ${matched}/${results.length}:`, sources);
     res.json(results);
   } catch (err) {
     console.error('[epg] Auto-match error:', err.message);
