@@ -64,7 +64,7 @@ const StreamsPage = () => {
     [streams, search, statusFilter]
   );
 
-  const { paginatedItems, currentPage, pageSize, totalItems, setCurrentPage, handlePageSizeChange } = usePagination(filtered, 20);
+  const { paginatedItems, currentPage, pageSize, totalItems, setCurrentPage, handlePageSizeChange } = usePagination(filtered, 500);
 
   const total = streams.length;
   const synced = streams.filter(s => ["synced", "updated", "already_exists"].includes(s.status)).length;
