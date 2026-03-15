@@ -854,6 +854,53 @@ app.delete('/api/logs', (req, res) => {
   res.json({ ok: true });
 });
 
+// ─── ADMIN: EPG table diagnostic ──────────────────────────────────
+app.get('/api/admin/epg-tables', async (req, res) => {
+  try {
+    const ministraPool = require('./ministra');
+    // We need raw pool access for diagnostics
+    const mysql = require('mysql2/promise');
+    const dbCfg = {
+      host: db.getSetting('ministra_db_host'),
+      port: parseInt(db.getSetting('ministra_db_port') || '3306'),
+      user: db.getSetting('ministra_db_user'),
+      password: db.getSetting('ministra_db_pass'),
+      database: db.getSetting('ministra_db_name') || 'stalker_db',
+      connectTimeout: 10000,
+    };
+    const conn = await mysql.createConnection(dbCfg);
+    const [tables] = await conn.query('SHOW TABLES');
+    const result = [];
+    for (const row of tables) {
+      const table = Object.values(row)[0];
+      if (!table.toLowerCase().includes('epg')) continue;
+      const [cols] = await conn.query(`SHOW COLUMNS FROM \`${table}\``);
+      const [cnt] = await conn.query(`SELECT COUNT(*) as c FROM \`${table}\``);
+      const colInfo = cols.map(c => `${c.Field} (${c.Type}${c.Null === 'NO' ? ' NOT NULL' : ''})`);
+      // Get sample row
+      const [sample] = await conn.query(`SELECT * FROM \`${table}\` LIMIT 3`);
+      result.push({
+        table,
+        rows: cnt[0].c,
+        columns: colInfo,
+        sample: sample.map(s => {
+          // Truncate long values
+          const trimmed = {};
+          for (const [k, v] of Object.entries(s)) {
+            const str = String(v || '');
+            trimmed[k] = str.length > 100 ? str.slice(0, 100) + '...' : str;
+          }
+          return trimmed;
+        }),
+      });
+    }
+    await conn.end();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── ADMIN: Reset local cache ───────────────────────────────────────
 app.post('/api/admin/reset', async (req, res) => {
   db.db.exec('DELETE FROM streams');

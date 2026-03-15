@@ -9,7 +9,7 @@ import { api } from "@/lib/api";
 import { toast } from "sonner";
 import {
   Upload, Globe, Send, Loader2, CheckCircle, XCircle, Search, Wand2,
-  Plus, Trash2, ExternalLink, Copy, ChevronDown, ChevronUp, Satellite, ArrowUpToLine, Server
+  Plus, Trash2, ExternalLink, Copy, ChevronDown, ChevronUp, Satellite, ArrowUpToLine, Server, Download
 } from "lucide-react";
 
 interface EpgMatch {
@@ -304,11 +304,19 @@ const EpgPage = () => {
   return (
     <DashboardLayout>
       <div className="p-6 lg:p-8 max-w-full animate-fade-in">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-foreground">EPG Management</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Manage EPG providers, import EPG IDs, and push to Ministra
-          </p>
+        <div className="mb-6 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">EPG Management</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Manage EPG providers, import EPG IDs, and push to Ministra
+            </p>
+          </div>
+          <a href="/api/channels/export.m3u" download="channels.m3u">
+            <Button variant="outline" size="sm">
+              <Download className="w-4 h-4 mr-2" />
+              Export M3U
+            </Button>
+          </a>
         </div>
 
         {/* ── EPG PROVIDERS ─────────────────────────────────────── */}
