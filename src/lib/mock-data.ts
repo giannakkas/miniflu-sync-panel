@@ -9,6 +9,7 @@ export interface Stream {
   outputUrl: string;
   protocol: Protocol;
   status: SyncStatus;
+  syncError?: string;
   ministraMatch: boolean;
   ministraChannelName?: string;
   bitrate?: string;

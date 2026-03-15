@@ -13,7 +13,7 @@ import { api } from "@/lib/api";
 import type { Stream } from "@/lib/mock-data";
 import { toast } from "sonner";
 import {
-  RefreshCw, Search, Send, Eye, CheckCircle, XCircle, AlertTriangle, List, Loader2,
+  RefreshCw, Search, Send, Eye, CheckCircle, XCircle, AlertTriangle, List, Loader2, Info,
 } from "lucide-react";
 
 const StreamsPage = () => {
@@ -39,6 +39,7 @@ const StreamsPage = () => {
         outputUrl: s.output_url,
         protocol: s.protocol || "MPEG-TS",
         status: s.status || "not_synced",
+        syncError: s.sync_error || "",
         ministraMatch: !!s.ministra_channel_name,
         ministraChannelName: s.ministra_channel_name,
         bitrate: s.bitrate,
@@ -221,7 +222,17 @@ const StreamsPage = () => {
                       <td className="p-3 hidden xl:table-cell">
                         <span className="font-mono text-xs text-muted-foreground truncate block max-w-[280px]" title={stream.outputUrl}>{stream.outputUrl}</span>
                       </td>
-                      <td className="p-3"><StatusBadge status={stream.status} /></td>
+                      <td className="p-3">
+                        <div className="flex items-center gap-1.5">
+                          <StatusBadge status={stream.status} />
+                          {stream.status === "failed" && stream.syncError && (
+                            <span className="group relative">
+                              <Info className="w-3.5 h-3.5 text-destructive cursor-help" />
+                              <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-popover border border-border text-popover-foreground text-xs rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 w-72 whitespace-normal">{stream.syncError}</span>
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td className="p-3 hidden lg:table-cell">
                         {stream.ministraMatch ? (
                           <span className="text-xs text-[hsl(var(--status-synced))] font-medium">✓ {stream.ministraChannelName}</span>

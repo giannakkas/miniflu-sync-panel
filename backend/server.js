@@ -171,7 +171,7 @@ async function syncStreamKeys(streamKeys) {
       else if (result.action === 'updated') { results.updated++; }
       else { results.skipped++; }
 
-      db.updateStreamSync(stream.stream_key, status, result.channelName, result.channelId);
+      db.updateStreamSync(stream.stream_key, status, result.channelName, result.channelId, '');
       db.addLog({
         stream_key: stream.stream_key, title: stream.title,
         action: `sync → ${result.action}`,
@@ -180,7 +180,7 @@ async function syncStreamKeys(streamKeys) {
       });
     } catch (err) {
       results.failed++;
-      db.updateStreamSync(stream.stream_key, 'failed', null, null);
+      db.updateStreamSync(stream.stream_key, 'failed', null, null, err.message);
       db.addLog({
         stream_key: stream.stream_key, title: stream.title,
         action: 'sync', result: 'failed', details: err.message,

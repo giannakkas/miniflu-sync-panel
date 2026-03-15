@@ -25,6 +25,7 @@ db.exec(`
     output_url            TEXT NOT NULL DEFAULT '',
     protocol              TEXT NOT NULL DEFAULT 'MPEG-TS',
     status                TEXT NOT NULL DEFAULT 'not_synced',
+    sync_error            TEXT DEFAULT '',
     ministra_channel_name TEXT,
     ministra_channel_id   INTEGER,
     bitrate               TEXT,
@@ -148,11 +149,11 @@ function getStreamByKey(key) {
   return db.prepare('SELECT * FROM streams WHERE stream_key = ?').get(key);
 }
 
-function updateStreamSync(streamKey, status, ministraChannelName, ministraChannelId) {
+function updateStreamSync(streamKey, status, ministraChannelName, ministraChannelId, syncError) {
   db.prepare(`
-    UPDATE streams SET status = ?, ministra_channel_name = ?, ministra_channel_id = ?, last_synced = datetime('now')
+    UPDATE streams SET status = ?, ministra_channel_name = ?, ministra_channel_id = ?, sync_error = ?, last_synced = datetime('now')
     WHERE stream_key = ?
-  `).run(status, ministraChannelName, ministraChannelId, streamKey);
+  `).run(status, ministraChannelName, ministraChannelId, syncError || '', streamKey);
 }
 
 function reorderStreams(order) {
