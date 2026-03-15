@@ -9,7 +9,7 @@ import { api } from "@/lib/api";
 import { toast } from "sonner";
 import {
   Upload, Globe, Send, Loader2, CheckCircle, XCircle, Search, Wand2,
-  Plus, Trash2, ExternalLink, Copy, ChevronDown, ChevronUp, Satellite
+  Plus, Trash2, ExternalLink, Copy, ChevronDown, ChevronUp, Satellite, ArrowUpToLine, Server
 } from "lucide-react";
 
 interface EpgMatch {
@@ -35,6 +35,15 @@ interface EpgProvider {
   enabled: number;
   notes: string;
   created_at: string;
+}
+
+interface MinistraEpgSource {
+  id: number;
+  uri: string;
+  prefix: string;
+  status: number;
+  updated: string;
+  hash: string;
 }
 
 const COUNTRY_FLAGS: Record<string, string> = {
@@ -73,8 +82,14 @@ const EpgPage = () => {
   });
   const [countryFilter, setCountryFilter] = useState<string>('ALL');
 
+  // Ministra EPG sources state
+  const [ministraSources, setMinistraSources] = useState<MinistraEpgSource[]>([]);
+  const [ministraLoading, setMinistraLoading] = useState(false);
+  const [pushing, setPushing] = useState(false);
+
   useEffect(() => {
     loadProviders();
+    loadMinistraSources();
   }, []);
 
   const loadProviders = async () => {
@@ -86,6 +101,50 @@ const EpgPage = () => {
       toast.error(`Failed to load providers: ${err.message}`);
     } finally {
       setProvidersLoading(false);
+    }
+  };
+
+  const loadMinistraSources = async () => {
+    try {
+      setMinistraLoading(true);
+      const data = await api.getMinistraEpgSources();
+      setMinistraSources(data);
+    } catch (err: any) {
+      // Silently fail - table may not exist yet
+      console.log('Failed to load Ministra sources:', err.message);
+    } finally {
+      setMinistraLoading(false);
+    }
+  };
+
+  const pushToMinistra = async () => {
+    setPushing(true);
+    try {
+      const result = await api.pushProvidersToMinistra();
+      if (result.pushed > 0) {
+        toast.success(`Pushed ${result.pushed} EPG source(s) to Ministra`, {
+          description: result.existing ? `${result.existing} already existed` : undefined,
+        });
+      } else if (result.existing > 0) {
+        toast.info(`All ${result.existing} sources already exist in Ministra`);
+      } else {
+        toast.warning('No enabled direct providers to push');
+      }
+      await loadMinistraSources();
+    } catch (err: any) {
+      toast.error(`Push failed: ${err.message}`);
+    } finally {
+      setPushing(false);
+    }
+  };
+
+  const handleDeleteMinistraSource = async (id: number) => {
+    try {
+      await api.deleteMinistraEpgSource(id);
+      setMinistraSources(prev => prev.filter(s => s.id !== id));
+      toast.success('Ministra EPG source deleted');
+    } catch (err: any) {
+      toast.error(`Failed to delete: ${err.message}`);
     }
   };
 
@@ -252,10 +311,21 @@ const EpgPage = () => {
               </span>
               {providersExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
             </div>
-            <Button variant="outline" size="sm" onClick={() => { setShowAddForm(!showAddForm); setProvidersExpanded(true); }}>
-              <Plus className="w-4 h-4 mr-1" />
-              Add Provider
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="default"
+                size="sm"
+                onClick={pushToMinistra}
+                disabled={pushing || providers.filter(p => p.type === 'direct' && p.enabled).length === 0}
+              >
+                {pushing ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <ArrowUpToLine className="w-4 h-4 mr-1" />}
+                Push to Ministra
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => { setShowAddForm(!showAddForm); setProvidersExpanded(true); }}>
+                <Plus className="w-4 h-4 mr-1" />
+                Add Provider
+              </Button>
+            </div>
           </div>
 
           {providersExpanded && (
@@ -387,6 +457,57 @@ const EpgPage = () => {
           )}
         </Card>
 
+        {/* ── MINISTRA EPG SOURCES ──────────────────────────────── */}
+        <Card className="p-6 bg-card border border-border mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <Server className="w-5 h-5 text-orange-500" />
+              <h2 className="text-lg font-semibold text-foreground">Ministra EPG Sources</h2>
+              <span className="text-xs bg-muted px-2 py-0.5 rounded-full text-muted-foreground">
+                {ministraSources.length} source(s)
+              </span>
+            </div>
+            <Button variant="outline" size="sm" onClick={loadMinistraSources} disabled={ministraLoading}>
+              {ministraLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4 mr-1" />}
+              Refresh
+            </Button>
+          </div>
+
+          {ministraSources.length > 0 ? (
+            <div className="space-y-2">
+              {ministraSources.map(s => (
+                <div key={s.id} className="flex items-center gap-3 px-4 py-3 border border-border rounded-lg bg-card">
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${s.status ? 'bg-green-500' : 'bg-red-400'}`} />
+                  <span className="text-xs font-mono text-muted-foreground w-8 shrink-0">#{s.id}</span>
+                  <code className="text-xs font-mono text-foreground flex-1 truncate">{s.uri}</code>
+                  {s.prefix && (
+                    <span className="text-[10px] bg-muted px-2 py-0.5 rounded text-muted-foreground shrink-0">
+                      prefix: {s.prefix}
+                    </span>
+                  )}
+                  {s.updated && (
+                    <span className="text-[10px] text-muted-foreground shrink-0">
+                      {new Date(s.updated).toLocaleDateString()}
+                    </span>
+                  )}
+                  <Button
+                    variant="ghost" size="sm"
+                    className="h-7 w-7 p-0 text-destructive hover:text-destructive shrink-0"
+                    onClick={() => handleDeleteMinistraSource(s.id)}
+                    title="Delete from Ministra"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              {ministraLoading ? 'Loading...' : 'No EPG sources in Ministra. Use "Push to Ministra" above to add enabled direct providers.'}
+            </p>
+          )}
+        </Card>
+
         {/* ── M3U IMPORT ────────────────────────────────────────── */}
         <Card className="p-6 bg-card border border-border mb-6">
           <h2 className="text-lg font-semibold text-foreground mb-4">1. Load M3U from iptveditor</h2>
@@ -425,7 +546,7 @@ const EpgPage = () => {
           <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
             <div>
               <h2 className="text-lg font-semibold text-foreground">2. Match Channels</h2>
-              <p className="text-xs text-muted-foreground mt-1">Match from M3U file or auto-detect using iptv-org + epg.best databases</p>
+              <p className="text-xs text-muted-foreground mt-1">Match from M3U file or auto-detect using iptv-org database + MENA alias map</p>
             </div>
             <div className="flex gap-2">
               <Button variant="outline" onClick={handleMatch} disabled={loading || autoLoading || !m3uText}>
@@ -501,7 +622,11 @@ const EpgPage = () => {
                           </td>
                           <td className="p-3 hidden lg:table-cell">
                             {m.matched_source && (
-                              <span className={`text-xs px-2 py-0.5 rounded-full ${m.matched_source === 'iptv-org' ? 'bg-blue-500/10 text-blue-500' : m.matched_source === 'epg.best' ? 'bg-purple-500/10 text-purple-500' : 'bg-green-500/10 text-green-500'}`}>
+                              <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                m.matched_source === 'iptv-org' ? 'bg-blue-500/10 text-blue-500' :
+                                m.matched_source === 'alias' ? 'bg-orange-500/10 text-orange-500' :
+                                'bg-green-500/10 text-green-500'
+                              }`}>
                                 {m.matched_source}
                               </span>
                             )}

@@ -77,4 +77,10 @@ export const api = {
     request('PUT', `/epg/providers/${id}`, fields),
   deleteEpgProvider: (id: number) =>
     request('DELETE', `/epg/providers/${id}`),
+  pushProvidersToMinistra: () =>
+    request('POST', '/epg/providers/push-to-ministra'),
+  getMinistraEpgSources: () =>
+    request('GET', '/epg/ministra-sources'),
+  deleteMinistraEpgSource: (id: number) =>
+    request('DELETE', `/epg/ministra-sources/${id}`),
 };

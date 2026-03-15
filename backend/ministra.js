@@ -418,6 +418,45 @@ async function getEpgStatus() {
   }));
 }
 
+// ── EPG Source management (Ministra epg table) ─────────────────────
+
+async function getEpgSources() {
+  const p = getPool();
+  try {
+    const [rows] = await p.query('SELECT * FROM epg ORDER BY id ASC');
+    return rows;
+  } catch (err) {
+    console.error(`[ministra] Failed to read epg table: ${err.message}`);
+    return [];
+  }
+}
+
+async function addEpgSource(uri, prefix) {
+  const p = getPool();
+  // Check if this URL already exists
+  const [existing] = await p.query('SELECT id FROM epg WHERE uri = ?', [uri]);
+  if (existing.length > 0) {
+    return { action: 'exists', id: existing[0].id };
+  }
+  const [result] = await p.query(
+    'INSERT INTO epg (uri, prefix, status) VALUES (?, ?, 1)',
+    [uri, prefix || '']
+  );
+  console.log(`[ministra] Added EPG source #${result.insertId}: ${uri}`);
+  return { action: 'created', id: result.insertId };
+}
+
+async function deleteEpgSource(id) {
+  const p = getPool();
+  await p.query('DELETE FROM epg WHERE id = ?', [id]);
+  console.log(`[ministra] Deleted EPG source #${id}`);
+}
+
+async function toggleEpgSource(id, enabled) {
+  const p = getPool();
+  await p.query('UPDATE epg SET status = ? WHERE id = ?', [enabled ? 1 : 0, id]);
+}
+
 // ── Close ───────────────────────────────────────────────────────────
 
 async function close() {
@@ -433,4 +472,5 @@ module.exports = {
   syncStream, reconcileWithPanel, close, extractStreamKey,
   getItvColumns, deleteChannel, deleteChannels, updateChannel, reorderChannels,
   applyEpgIds, getEpgStatus,
+  getEpgSources, addEpgSource, deleteEpgSource, toggleEpgSource,
 };
