@@ -63,6 +63,8 @@ export const api = {
   // EPG
   matchEpg: (m3u_text: string) =>
     request('POST', '/epg/match', { m3u_text }),
+  autoMatchEpg: () =>
+    request('POST', '/epg/auto-match'),
   applyEpg: (mappings: { id: number; xmltv_id: string; logo?: string }[]) =>
     request('POST', '/epg/apply', { mappings }),
   getEpgStatus: () => request('GET', '/epg/status'),

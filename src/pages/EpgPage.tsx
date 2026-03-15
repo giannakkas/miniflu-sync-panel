@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
-import { Upload, Globe, Send, Loader2, CheckCircle, XCircle, Search } from "lucide-react";
+import { Upload, Globe, Send, Loader2, CheckCircle, XCircle, Search, Wand2 } from "lucide-react";
 
 interface EpgMatch {
   id: number;
@@ -16,6 +16,7 @@ interface EpgMatch {
   current_xmltv_id: string;
   matched_tvg_id: string;
   matched_tvg_logo: string;
+  matched_source?: string;
   matched: boolean;
 }
 
@@ -24,6 +25,7 @@ const EpgPage = () => {
   const [m3uUrl, setM3uUrl] = useState("");
   const [matches, setMatches] = useState<EpgMatch[]>([]);
   const [loading, setLoading] = useState(false);
+  const [autoLoading, setAutoLoading] = useState(false);
   const [applying, setApplying] = useState(false);
   const [search, setSearch] = useState("");
 
@@ -73,6 +75,26 @@ const EpgPage = () => {
       toast.error(`Match failed: ${err.message}`);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAutoMatch = async () => {
+    setAutoLoading(true);
+    try {
+      const results = await api.autoMatchEpg();
+      setMatches(results);
+      setOverrides({});
+      const matched = results.filter((r: EpgMatch) => r.matched).length;
+      const sources = results.reduce((acc: Record<string, number>, r: EpgMatch) => {
+        if (r.matched_source) acc[r.matched_source] = (acc[r.matched_source] || 0) + 1;
+        return acc;
+      }, {});
+      const sourceText = Object.entries(sources).map(([k, v]) => `${v} from ${k}`).join(', ');
+      toast.success(`${matched}/${results.length} channels matched`, { description: sourceText || undefined });
+    } catch (err: any) {
+      toast.error(`Auto-match failed: ${err.message}`);
+    } finally {
+      setAutoLoading(false);
     }
   };
 
@@ -151,15 +173,21 @@ const EpgPage = () => {
 
         {/* Step 2: Match */}
         <Card className="p-6 bg-card border border-border mb-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
             <div>
               <h2 className="text-lg font-semibold text-foreground">2. Match Channels</h2>
-              <p className="text-xs text-muted-foreground mt-1">Match M3U entries to Ministra channels by name</p>
+              <p className="text-xs text-muted-foreground mt-1">Match from M3U file or auto-detect using iptv-org + epg.best databases</p>
             </div>
-            <Button onClick={handleMatch} disabled={loading || !m3uText}>
-              {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
-              Match Channels
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={handleMatch} disabled={loading || autoLoading || !m3uText}>
+                {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
+                Match from M3U
+              </Button>
+              <Button onClick={handleAutoMatch} disabled={loading || autoLoading}>
+                {autoLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Wand2 className="w-4 h-4 mr-2" />}
+                Auto-Match EPG
+              </Button>
+            </div>
           </div>
         </Card>
 
@@ -195,6 +223,7 @@ const EpgPage = () => {
                       <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase">Channel</th>
                       <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase">Current EPG ID</th>
                       <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase">Matched EPG ID</th>
+                      <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase hidden lg:table-cell">Source</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -220,6 +249,13 @@ const EpgPage = () => {
                               placeholder="No match"
                               className="h-8 text-xs font-mono w-full max-w-[280px]"
                             />
+                          </td>
+                          <td className="p-3 hidden lg:table-cell">
+                            {m.matched_source && (
+                              <span className={`text-xs px-2 py-0.5 rounded-full ${m.matched_source === 'iptv-org' ? 'bg-blue-500/10 text-blue-500' : m.matched_source === 'epg.best' ? 'bg-purple-500/10 text-purple-500' : 'bg-green-500/10 text-green-500'}`}>
+                                {m.matched_source}
+                              </span>
+                            )}
                           </td>
                         </tr>
                       );
