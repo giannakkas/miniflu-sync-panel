@@ -189,6 +189,33 @@ async function getGeneralGenreId() {
 
 // ── ch_links helper (Ministra stores streaming URLs here) ───────────
 
+async function setStreamingLinks(channelId, primaryUrl, secondaryUrl) {
+  const p = getPool();
+  // Delete all existing links for this channel
+  await p.query('DELETE FROM ch_links WHERE ch_id = ?', [channelId]);
+
+  // Insert primary link (priority 0)
+  await p.query(
+    `INSERT INTO ch_links (ch_id, priority, url, status, use_http_tmp_link, wowza_tmp_link,
+     user_agent_filter, monitoring_url, use_load_balancing, changed)
+     VALUES (?, 0, ?, 1, 0, 0, '', '', 0, NOW())`,
+    [channelId, primaryUrl]
+  );
+
+  // Insert secondary link (priority 1)
+  if (secondaryUrl) {
+    await p.query(
+      `INSERT INTO ch_links (ch_id, priority, url, status, use_http_tmp_link, wowza_tmp_link,
+       user_agent_filter, monitoring_url, use_load_balancing, changed)
+       VALUES (?, 1, ?, 1, 0, 0, '', '', 0, NOW())`,
+      [channelId, secondaryUrl]
+    );
+  }
+
+  // Also update itv.cmd to match primary
+  await p.query('UPDATE itv SET cmd = ?, modified = NOW() WHERE id = ?', [primaryUrl, channelId]);
+}
+
 async function upsertChLink(pool, channelId, url) {
   // Check if link already exists for this channel
   const [existing] = await pool.query(
@@ -586,4 +613,5 @@ module.exports = {
   getItvColumns, deleteChannel, deleteChannels, updateChannel, reorderChannels,
   applyEpgIds, getEpgStatus,
   getEpgSources, addEpgSource, deleteEpgSource, toggleEpgSource, updateEpgSourceUrl,
+  setStreamingLinks,
 };

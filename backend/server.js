@@ -702,6 +702,47 @@ app.get('/api/admin/epg-tables', async (req, res) => {
   }
 });
 
+// ─── ADMIN: Bulk update streaming links for channels 4-100 ──────────
+app.post('/api/admin/bulk-stream-links', async (req, res) => {
+  try {
+    const fromCh = parseInt(req.body.from) || 4;
+    const toCh = parseInt(req.body.to) || 100;
+    const primaryTemplate = req.body.primary || 'http://172.18.181.65:8000/play/TV{N}?ts';
+    const secondaryTemplate = req.body.secondary || 'http://172.18.181.12:8080/TV{N}/mpegts';
+
+    console.log(`[admin] Bulk updating streaming links for channels ${fromCh}-${toCh}`);
+    console.log(`[admin] Primary: ${primaryTemplate}`);
+    console.log(`[admin] Secondary: ${secondaryTemplate}`);
+
+    const results = { updated: 0, skipped: 0, errors: [] };
+
+    const channels = await ministra.getChannels();
+
+    for (const ch of channels) {
+      if (ch.number < fromCh || ch.number > toCh) continue;
+
+      const N = ch.number;
+      const primaryUrl = primaryTemplate.replace(/{N}/g, N);
+      const secondaryUrl = secondaryTemplate.replace(/{N}/g, N);
+
+      try {
+        await ministra.setStreamingLinks(ch.id, primaryUrl, secondaryUrl);
+        results.updated++;
+        console.log(`[admin] Ch #${N} (${ch.name}): ${primaryUrl} + ${secondaryUrl}`);
+      } catch (err) {
+        results.errors.push({ channel: ch.number, name: ch.name, error: err.message });
+        console.error(`[admin] Ch #${N} (${ch.name}) failed: ${err.message}`);
+      }
+    }
+
+    console.log(`[admin] Bulk update complete: ${results.updated} updated, ${results.skipped} skipped, ${results.errors.length} errors`);
+    res.json({ ok: true, ...results });
+  } catch (err) {
+    console.error('[admin] Bulk stream links error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── ADMIN: Reset local cache ───────────────────────────────────────
 app.post('/api/admin/reset', async (req, res) => {
   db.db.exec('DELETE FROM streams');
