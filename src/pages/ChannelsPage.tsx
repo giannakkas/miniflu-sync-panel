@@ -17,11 +17,18 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { Search, MonitorPlay, Loader2, GripVertical, RefreshCw, Trash2, Pencil, X, Check, Download } from "lucide-react";
 
+interface StreamLink {
+  url: string;
+  priority: number;
+  status: number;
+}
+
 interface Channel {
   id: number;
   name: string;
   number: number;
   cmd: string;
+  links: StreamLink[];
   sourceStream: string;
   status: string;
   hasEpg?: boolean;
@@ -61,6 +68,17 @@ function SortableRow({ ch, selected, onToggle, onEdit, onDelete, editing, editDa
       <td className="p-3 hidden lg:table-cell">
         {editing && editData ? (
           <Input value={editData.cmd} onChange={e => setEditData({ ...editData, cmd: e.target.value })} className="h-8 text-xs font-mono" />
+        ) : ch.links && ch.links.length > 0 ? (
+          <div className="space-y-1">
+            {ch.links.map((link, i) => (
+              <div key={i} className="flex items-center gap-1.5">
+                <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold shrink-0 ${link.priority === 0 ? 'bg-green-500/15 text-green-600' : 'bg-muted text-muted-foreground'}`}>
+                  {link.priority === 0 ? 'PRI' : 'SEC'}
+                </span>
+                <span className="font-mono text-xs text-muted-foreground truncate block max-w-[280px]" title={link.url}>{link.url}</span>
+              </div>
+            ))}
+          </div>
         ) : (
           <span className="font-mono text-xs text-muted-foreground truncate block max-w-[280px]" title={ch.cmd}>{ch.cmd}</span>
         )}
@@ -269,7 +287,7 @@ const ChannelsPage = () => {
                       <th className="text-center p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider w-14">EPG</th>
                       <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Channel Name</th>
                       <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Source Stream</th>
-                      <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden lg:table-cell">CMD / URL</th>
+                      <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden lg:table-cell">Streaming Links</th>
                       <th className="text-left p-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>

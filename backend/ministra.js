@@ -119,11 +119,23 @@ async function getChannels() {
      GROUP BY i.id
      ORDER BY i.number ASC`
   );
+
+  // Fetch all ch_links in one query
+  const [allLinks] = await p.query(
+    'SELECT ch_id, url, priority, status FROM ch_links ORDER BY ch_id ASC, priority ASC'
+  );
+  const linksMap = new Map();
+  for (const link of allLinks) {
+    if (!linksMap.has(link.ch_id)) linksMap.set(link.ch_id, []);
+    linksMap.get(link.ch_id).push({ url: link.url, priority: link.priority, status: link.status });
+  }
+
   return rows.map(r => ({
     id: r.id,
     name: r.name,
     number: r.number,
     cmd: r.cmd || '',
+    links: linksMap.get(r.id) || [],
     sourceStream: extractStreamKey(r.cmd),
     status: r.status === 1 ? 'synced' : 'not_synced',
     xmltv_id: r.xmltv_id || '',
