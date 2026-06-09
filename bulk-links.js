@@ -9,7 +9,8 @@
  * Run from /opt/miniflu-sync-panel/backend/
  */
 
-const mysql = require('mysql2/promise');
+const path = require('path');
+const mysql = require(path.join(__dirname, 'backend', 'node_modules', 'mysql2', 'promise'));
 
 const DB_CONFIG = {
   host: '172.18.181.13',
@@ -21,7 +22,7 @@ const DB_CONFIG = {
 };
 
 const FROM_CH = 4;
-const TO_CH = 100;
+const TO_CH = 103;
 const PRIMARY_TEMPLATE = 'http://172.18.181.65:8000/play/TV{N}?ts';
 const SECONDARY_TEMPLATE = 'http://172.18.181.12:8080/TV{N}/mpegts';
 
